@@ -24,6 +24,7 @@ import { unwrap } from "../lib/opencode";
 import {
   buildOpenworkWorkspaceBaseUrl,
   createOpenworkServerClient,
+  fetchOpenworkTokenFromServer,
   normalizeOpenworkServerUrl,
   OpenworkServerError,
   type OpenworkServerClient,
@@ -1753,13 +1754,25 @@ export function createWorkspaceStore(options: {
 
     const run = (async () => {
     const hostUrl = normalizeOpenworkServerUrl(input.openworkHostUrl ?? "") ?? "";
-    const token = input.openworkToken?.trim() ?? "";
+    let token = input.openworkToken?.trim() ?? "";
     const directory = input.directory?.trim() ?? "";
     const displayName = input.displayName?.trim() || null;
 
     if (!hostUrl) {
       options.setError(t("app.error.remote_base_url_required", currentLocale()));
       return false;
+    }
+
+    if (!token) {
+      const fetched = await fetchOpenworkTokenFromServer(hostUrl);
+      if (fetched) {
+        token = fetched;
+        options.updateOpenworkServerSettings({
+          ...options.openworkServerSettings(),
+          urlOverride: hostUrl,
+          token: fetched,
+        });
+      }
     }
 
     options.setError(null);
@@ -1826,7 +1839,15 @@ export function createWorkspaceStore(options: {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : safeStringify(error);
-      options.setError(addOpencodeCacheHint(message));
+      const isAuthError =
+        message.includes("Invalid bearer token") ||
+        message.includes("Access token required") ||
+        message.includes("rejected the access token") ||
+        (error instanceof OpenworkServerError && (error.status === 401 || error.status === 403));
+      const hint = isAuthError
+        ? ` Get the token from ${hostUrl.replace(/\/+$/, "")}/token and add it in Settings → Advanced → OWL Remote Worker.`
+        : "";
+      options.setError(addOpencodeCacheHint(message + hint));
       return false;
     }
 

@@ -1945,30 +1945,32 @@ export default function App() {
   };
 
   async function listCommands(): Promise<{ id: string; name: string; description?: string; source?: "command" | "mcp" | "skill" }[]> {
-    const active = workspaceStore.activeWorkspaceDisplay();
-    if (active.workspaceType === "remote" && active.remoteType === "openwork") {
-      const ow = openworkServerClient();
-      const workspaceId = openworkServerWorkspaceId();
-      if (ow && workspaceId) {
-        try {
-          const res = await ow.listCommands(workspaceId, "workspace");
-          const list = (res?.items ?? []).map((cmd) => ({
-            id: `cmd:${cmd.name}`,
-            name: cmd.name,
-            description: cmd.description,
-            source: "command" as const,
-          }));
-          if (list.some((entry) => entry.name === "compact")) return list;
-          return [BUILTIN_COMPACT_COMMAND, ...list];
-        } catch {
-          return [];
-        }
+    const root = workspaceStore.activeWorkspaceRoot().trim() || "";
+    const ow = openworkServerClient();
+    const workspaceId = openworkServerWorkspaceId();
+    // Prefer OpenWork API when we have a workspace ID (remote or cloud worker) to avoid ENOENT on paths like /workspace
+    if (ow && workspaceId) {
+      try {
+        const res = await ow.listCommands(workspaceId, "workspace");
+        const list = (res?.items ?? []).map((cmd) => ({
+          id: `cmd:${cmd.name}`,
+          name: cmd.name,
+          description: cmd.description,
+          source: "command" as const,
+        }));
+        if (list.some((entry) => entry.name === "compact")) return list;
+        return [BUILTIN_COMPACT_COMMAND, ...list];
+      } catch {
+        return [];
       }
-      return [];
+    }
+    // Don't pass Unix-style absolute paths (e.g. /workspace) to local OpenCode client — causes ENOENT when opened locally
+    if (root.startsWith("/") && root.length > 1) {
+      return [BUILTIN_COMPACT_COMMAND];
     }
     const c = client();
     if (!c) return [];
-    const list = await listCommandsTyped(c, workspaceStore.activeWorkspaceRoot().trim() || undefined);
+    const list = await listCommandsTyped(c, root || undefined);
     if (list.some((entry) => entry.name === "compact")) {
       return list;
     }

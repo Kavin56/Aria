@@ -996,12 +996,15 @@ export class OpenworkServerError extends Error {
   }
 }
 
+/** So ngrok returns JSON instead of the browser interstitial when the app fetches from an ngrok URL. */
+const NGROK_SKIP_HEADER = { "ngrok-skip-browser-warning": "1" };
+
 function buildHeaders(
   token?: string,
   hostToken?: string,
   extra?: Record<string, string>,
 ) {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...NGROK_SKIP_HEADER };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -1015,7 +1018,7 @@ function buildHeaders(
 }
 
 function buildAuthHeaders(token?: string, hostToken?: string, extra?: Record<string, string>) {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -1191,6 +1194,33 @@ async function requestBinary(
   const filename = filenameRaw ? decodeURIComponent(filenameRaw) : null;
   const data = await response.arrayBuffer();
   return { data, contentType, filename };
+}
+
+/**
+ * Fetch the client bearer token from the OpenWork server's GET /token endpoint (no auth required).
+ * Use this when the user has not set a token so the app can obtain it for RunPod/cloud workers.
+ */
+export async function fetchOpenworkTokenFromServer(hostUrl: string): Promise<string | null> {
+  const base = (hostUrl || "").trim().replace(/\/+$/, "");
+  if (!base) return null;
+  try {
+    const fetchImpl = resolveFetch();
+    const url = `${base}/token`;
+    const res = await fetchWithTimeout(
+      fetchImpl,
+      url,
+      { method: "GET", headers: NGROK_SKIP_HEADER },
+      8_000,
+    );
+    const text = await res.text();
+    const json = text ? (JSON.parse(text) as { token?: string }) : null;
+    if (res.ok && json && typeof json.token === "string" && json.token.trim()) {
+      return json.token.trim();
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 export function createOpenworkServerClient(options: { baseUrl: string; token?: string; hostToken?: string }) {
