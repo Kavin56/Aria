@@ -1797,54 +1797,82 @@ export function createWorkspaceStore(options: {
       token: token || undefined,
     });
 
-    try {
-      let resolved: Awaited<ReturnType<typeof resolveOpenworkHost>> | null = null;
-      try {
-        resolved = await resolveOpenworkHost({
-          hostUrl,
-          token,
-          directoryHint: directory || null,
-        });
-      } catch (error) {
-        // Sandbox workers can report healthy before listWorkspaces is fully ready.
-        // Fall back to host-level OpenCode URL so the worker can still be registered.
-        if (input.sandboxBackend !== "docker") {
-          throw error;
-        }
-        wsDebug("sandbox:openwork-resolve-fallback:error", {
-          hostUrl,
-          message: error instanceof Error ? error.message : safeStringify(error),
-        });
-      }
+    const isAuthError = (err: unknown) => {
+      const msg = err instanceof Error ? err.message : safeStringify(err);
+      return (
+        msg.includes("Invalid bearer token") ||
+        msg.includes("Access token required") ||
+        msg.includes("rejected the access token") ||
+        (err instanceof OpenworkServerError && (err.status === 401 || err.status === 403))
+      );
+    };
 
-      if (resolved?.kind === "openwork") {
-        resolvedBaseUrl = resolved.opencodeBaseUrl;
-        resolvedDirectory = resolved.directory || directory;
-        openworkWorkspace = resolved.workspace;
-        resolvedHostUrl = resolved.hostUrl;
-        resolvedAuth = resolved.auth;
-      } else if (input.sandboxBackend === "docker") {
-        resolvedHostUrl = hostUrl;
-        resolvedBaseUrl = `${hostUrl.replace(/\/+$/, "")}/opencode`;
-        resolvedDirectory = directory || resolvedDirectory;
-        resolvedAuth = token ? { token, mode: "openwork" } : undefined;
-        wsDebug("sandbox:openwork-resolve-fallback:host", {
-          hostUrl: resolvedHostUrl,
-          baseUrl: resolvedBaseUrl,
-          directory: resolvedDirectory,
-        });
-      } else {
-        options.setError("OpenWork server unavailable. Check the URL and token.");
-        return false;
+    let lastError: unknown = null;
+    let tokenToUse = token;
+
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let resolved: Awaited<ReturnType<typeof resolveOpenworkHost>> | null = null;
+        try {
+          resolved = await resolveOpenworkHost({
+            hostUrl,
+            token: tokenToUse,
+            directoryHint: directory || null,
+          });
+        } catch (error) {
+          if (input.sandboxBackend === "docker") {
+            wsDebug("sandbox:openwork-resolve-fallback:error", {
+              hostUrl,
+              message: error instanceof Error ? error.message : safeStringify(error),
+            });
+          } else {
+            lastError = error;
+            if (attempt === 0 && isAuthError(error)) {
+              const fetched = await fetchOpenworkTokenFromServer(hostUrl);
+              if (fetched) {
+                tokenToUse = fetched;
+                options.updateOpenworkServerSettings({
+                  ...options.openworkServerSettings(),
+                  urlOverride: hostUrl,
+                  token: fetched,
+                });
+                continue;
+              }
+            }
+            throw error;
+          }
+        }
+
+        if (resolved?.kind === "openwork") {
+          resolvedBaseUrl = resolved.opencodeBaseUrl;
+          resolvedDirectory = resolved.directory || directory;
+          openworkWorkspace = resolved.workspace;
+          resolvedHostUrl = resolved.hostUrl;
+          resolvedAuth = resolved.auth;
+          break;
+        }
+        if (input.sandboxBackend === "docker") {
+          resolvedHostUrl = hostUrl;
+          resolvedBaseUrl = `${hostUrl.replace(/\/+$/, "")}/opencode`;
+          resolvedDirectory = directory || resolvedDirectory;
+          resolvedAuth = tokenToUse ? { token: tokenToUse, mode: "openwork" } : undefined;
+          wsDebug("sandbox:openwork-resolve-fallback:host", {
+            hostUrl: resolvedHostUrl,
+            baseUrl: resolvedBaseUrl,
+            directory: resolvedDirectory,
+          });
+          break;
+        }
+        if (resolved !== null) {
+          options.setError("OpenWork server unavailable. Check the URL and token.");
+          return false;
+        }
+        throw lastError ?? new Error("OpenWork server unavailable.");
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : safeStringify(error);
-      const isAuthError =
-        message.includes("Invalid bearer token") ||
-        message.includes("Access token required") ||
-        message.includes("rejected the access token") ||
-        (error instanceof OpenworkServerError && (error.status === 401 || error.status === 403));
-      const hint = isAuthError
+      const authErr = isAuthError(error);
+      const hint = authErr
         ? ` Get the token from ${hostUrl.replace(/\/+$/, "")}/token and add it in Settings → Advanced → OWL Remote Worker.`
         : "";
       options.setError(addOpencodeCacheHint(message + hint));
@@ -1888,7 +1916,7 @@ export function createWorkspaceStore(options: {
           displayName,
           remoteType,
           openworkHostUrl: remoteType === "openwork" ? resolvedHostUrl : null,
-          openworkToken: remoteType === "openwork" ? (token || null) : null,
+          openworkToken: remoteType === "openwork" ? (tokenToUse || null) : null,
           openworkWorkspaceId: remoteType === "openwork" ? openworkWorkspace?.id ?? null : null,
           openworkWorkspaceName: remoteType === "openwork" ? openworkWorkspace?.name ?? null : null,
           sandboxBackend: input.sandboxBackend ?? null,
@@ -1911,7 +1939,7 @@ export function createWorkspaceStore(options: {
           directory: finalDirectory || null,
           displayName,
           openworkHostUrl: remoteType === "openwork" ? resolvedHostUrl : null,
-          openworkToken: remoteType === "openwork" ? (token || null) : null,
+          openworkToken: remoteType === "openwork" ? (tokenToUse || null) : null,
           openworkWorkspaceId: remoteType === "openwork" ? openworkWorkspace?.id ?? null : null,
           openworkWorkspaceName: remoteType === "openwork" ? openworkWorkspace?.name ?? null : null,
           sandboxBackend: input.sandboxBackend ?? null,
