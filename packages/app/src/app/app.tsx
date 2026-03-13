@@ -167,6 +167,7 @@ import {
   stripOpenworkConnectInviteFromUrl,
   createOpenworkServerClient,
   DEFAULT_CLOUD_WORKER_URL,
+  fetchOpenworkTokenFromServer,
   getEffectiveOpenworkServerUrl,
   hydrateOpenworkServerSettingsFromEnv,
   normalizeOpenworkServerUrl,
@@ -3447,6 +3448,20 @@ export default function App() {
     clearOpenworkServerSettings();
     setOpenworkServerSettings({});
   };
+
+  // Auto-fetch token from GET /token when Remote Worker URL is set but token is empty (no manual paste needed)
+  createEffect(() => {
+    const settings = openworkServerSettings();
+    const url = getEffectiveOpenworkServerUrl(settings) ?? settings.urlOverride?.trim() ?? "";
+    const token = settings.token?.trim() ?? "";
+    if (!url || token) return;
+    void (async () => {
+      const fetched = await fetchOpenworkTokenFromServer(url);
+      if (fetched) {
+        updateOpenworkServerSettings({ ...settings, token: fetched });
+      }
+    })();
+  });
 
   const [editRemoteWorkspaceOpen, setEditRemoteWorkspaceOpen] = createSignal(false);
   const [editRemoteWorkspaceId, setEditRemoteWorkspaceId] = createSignal<string | null>(null);
