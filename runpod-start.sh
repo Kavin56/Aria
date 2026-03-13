@@ -159,10 +159,11 @@ else
 fi
 
 # ─── 3. Start OpenWork server on port 8787 ────────────────────────────────────
-# This repo: openwork-server. MAYA fork (Kavin56/MAYA): set SERVER_PACKAGE=maya-server
+# This repo (Aria): openwork-server. MAYA fork (Kavin56/MAYA): set SERVER_PACKAGE=maya-server
 SERVER_PACKAGE="${SERVER_PACKAGE:-openwork-server}"
 echo "▶ Starting OpenWork server ($SERVER_PACKAGE) on port $SERVER_PORT..."
-pnpm --filter "$SERVER_PACKAGE" dev \
+# Use -- so pnpm forwards args to the dev script (required for --host/--port)
+pnpm --filter "$SERVER_PACKAGE" dev -- \
   --host 0.0.0.0 \
   --port "$SERVER_PORT" \
   --approval auto \
@@ -172,15 +173,22 @@ pnpm --filter "$SERVER_PACKAGE" dev \
   > /tmp/maya-server.log 2>&1 &
 SERVER_PID=$!
 echo "  OpenWork server PID: $SERVER_PID"
-sleep 3
 
+# Wait for server to bind (retry a few times; startup can be slow)
 set +e
-if curl -sf "http://localhost:$SERVER_PORT/health" >/dev/null; then
-  echo "  ✓ OpenWork server is healthy"
-else
-  echo "  ✗ OpenWork server health check failed — check /tmp/maya-server.log"
-  cat /tmp/maya-server.log
-fi
+for i in 1 2 3 4 5; do
+  sleep 2
+  if curl -sf "http://127.0.0.1:$SERVER_PORT/health" >/dev/null; then
+    echo "  ✓ OpenWork server is healthy on port $SERVER_PORT"
+    break
+  fi
+  if [ "$i" -eq 5 ]; then
+    echo "  ✗ OpenWork server health check failed after 10s — nothing is listening on port $SERVER_PORT"
+    echo "  If you see ngrok ERR_NGROK_8012, the tunnel is up but this server did not start."
+    echo "  Last 40 lines of /tmp/maya-server.log:"
+    tail -40 /tmp/maya-server.log
+  fi
+done
 set -e
 
 echo ""
@@ -200,6 +208,11 @@ echo "╟───────────────────────�
 echo "║  In the web app: Settings → Advanced → choose Cloud Worker,   ║"
 echo "║  set Remote Worker URL to the Public URL above, and set the    ║"
 echo "║  token (Config tab or Advanced) to the Client token below.    ║"
+echo "╟────────────────────────────────────────────────────────────────╢"
+echo "║  If you see ngrok ERR_NGROK_8012 (connection refused):         ║"
+echo "║  On this machine run: curl -s http://127.0.0.1:$SERVER_PORT/health   ║"
+echo "║  If that fails, the OpenWork server did not start — check      ║"
+echo "║  /tmp/maya-server.log and ensure SERVER_PACKAGE is correct.   ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Client token (paste in web UI Config/Advanced): $MAYA_TOKEN"
