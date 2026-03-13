@@ -11,8 +11,8 @@ import type {
   OpenworkServerDiagnostics,
   OpenworkServerSettings,
   OpenworkServerStatus,
-  DEFAULT_CLOUD_WORKER_URL,
 } from "../lib/openwork-server";
+import { DEFAULT_CLOUD_WORKER_URL } from "../lib/openwork-server";
 import type {
   EngineInfo,
   OrchestratorBinaryInfo,
@@ -1343,7 +1343,11 @@ export default function SettingsView(props: SettingsViewProps) {
               <div class="text-sm font-medium text-black dark:text-white">Connection</div>
               <div class="text-xs text-gray-600 dark:text-gray-400">{props.headerStatus}</div>
               <div class="text-xs text-gray-500 dark:text-gray-500 font-mono break-all">
-                {props.openworkServerUrl?.trim() || props.baseUrl}
+                {(() => {
+                  const raw = props.openworkServerUrl?.trim() || props.baseUrl || "";
+                  const show = raw && raw.includes("nondetonating-cecile-nongrounded") ? DEFAULT_CLOUD_WORKER_URL : raw;
+                  return show;
+                })()}
               </div>
               <div class="pt-2 flex flex-wrap gap-2">
                 <button

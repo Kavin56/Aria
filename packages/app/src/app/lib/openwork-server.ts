@@ -830,7 +830,11 @@ export function readOpenworkServerSettings(): OpenworkServerSettings {
     const executionMode: OpenworkExecutionMode =
       executionModeRaw === "cloud" ? "cloud" : "local";
     const cloudWorkerUrlRaw = window.localStorage.getItem(STORAGE_CLOUD_WORKER_URL) ?? "";
-    const cloudWorkerUrl = normalizeOpenworkServerUrl(cloudWorkerUrlRaw) ?? undefined;
+    let cloudWorkerUrl = normalizeOpenworkServerUrl(cloudWorkerUrlRaw) ?? undefined;
+    if (cloudWorkerUrl && cloudWorkerUrl.includes("nondetonating-cecile-nongrounded")) {
+      cloudWorkerUrl = DEFAULT_CLOUD_WORKER_URL;
+      window.localStorage.setItem(STORAGE_CLOUD_WORKER_URL, cloudWorkerUrl);
+    }
     return {
       urlOverride: urlOverride ?? undefined,
       portOverride: Number.isNaN(portOverride) ? undefined : portOverride,
@@ -946,9 +950,10 @@ export function clearOpenworkServerSettings() {
 export function getEffectiveOpenworkServerUrl(settings: OpenworkServerSettings): string | null {
   const mode = settings.executionMode === "cloud" ? "cloud" : "local";
   if (mode === "cloud") {
-    const url =
+    let url =
       normalizeOpenworkServerUrl(settings.cloudWorkerUrl ?? "") ??
       normalizeOpenworkServerUrl(DEFAULT_CLOUD_WORKER_URL);
+    if (url && url.includes("nondetonating-cecile-nongrounded")) url = DEFAULT_CLOUD_WORKER_URL;
     return url;
   }
   return normalizeOpenworkServerUrl(settings.urlOverride ?? "") ?? null;
