@@ -157,11 +157,15 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
     }
   }
 
+  const authHeader = resolveAuthHeader(auth);
   const fetchImpl = isTauriRuntime()
     ? createTauriFetch(auth)
     : (input: RequestInfo | URL, init?: RequestInit) => {
         const initHeaders = new Headers(init?.headers);
         initHeaders.set("ngrok-skip-browser-warning", "1");
+        if (authHeader && !initHeaders.has("Authorization")) {
+          initHeaders.set("Authorization", authHeader);
+        }
         return fetchWithTimeout(
           globalThis.fetch,
           input,
