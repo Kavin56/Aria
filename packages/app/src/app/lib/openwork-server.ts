@@ -82,11 +82,21 @@ export type OpenworkRuntimeSnapshot = {
   services: OpenworkRuntimeServiceSnapshot[];
 };
 
+/** When "cloud", app uses cloudWorkerUrl as OpenWork server; when "local", uses local host. */
+export type OpenworkExecutionMode = "local" | "cloud";
+
 export type OpenworkServerSettings = {
   urlOverride?: string;
   portOverride?: number;
   token?: string;
+  /** OWL/remote execution: "local" (default) or "cloud". When "cloud", cloudWorkerUrl is used. */
+  executionMode?: OpenworkExecutionMode;
+  /** Public ngrok URL for RunPod/cloud worker. Used when executionMode === "cloud". */
+  cloudWorkerUrl?: string;
 };
+
+/** Default RunPod ngrok URL (hardcoded for MAYA cloud worker). */
+export const DEFAULT_CLOUD_WORKER_URL = "https://unameliorative-regretably-kimberly.ngrok-free.dev";
 
 export type OpenworkWorkspaceInfo = {
   id: string;
@@ -525,6 +535,8 @@ export const DEFAULT_OPENWORK_SERVER_PORT = 8787;
 const STORAGE_URL_OVERRIDE = "openwork.server.urlOverride";
 const STORAGE_PORT_OVERRIDE = "openwork.server.port";
 const STORAGE_TOKEN = "openwork.server.token";
+const STORAGE_EXECUTION_MODE = "openwork.server.executionMode";
+const STORAGE_CLOUD_WORKER_URL = "openwork.server.cloudWorkerUrl";
 
 export function normalizeOpenworkServerUrl(input: string) {
   const trimmed = input.trim();
@@ -814,10 +826,17 @@ export function readOpenworkServerSettings(): OpenworkServerSettings {
     const portRaw = window.localStorage.getItem(STORAGE_PORT_OVERRIDE) ?? "";
     const portOverride = portRaw ? Number(portRaw) : undefined;
     const token = window.localStorage.getItem(STORAGE_TOKEN) ?? undefined;
+    const executionModeRaw = window.localStorage.getItem(STORAGE_EXECUTION_MODE) ?? "";
+    const executionMode: OpenworkExecutionMode =
+      executionModeRaw === "cloud" ? "cloud" : "local";
+    const cloudWorkerUrlRaw = window.localStorage.getItem(STORAGE_CLOUD_WORKER_URL) ?? "";
+    const cloudWorkerUrl = normalizeOpenworkServerUrl(cloudWorkerUrlRaw) ?? undefined;
     return {
       urlOverride: urlOverride ?? undefined,
       portOverride: Number.isNaN(portOverride) ? undefined : portOverride,
       token: token?.trim() || undefined,
+      executionMode,
+      cloudWorkerUrl: cloudWorkerUrl ?? undefined,
     };
   } catch {
     return {};
@@ -830,6 +849,8 @@ export function writeOpenworkServerSettings(next: OpenworkServerSettings): Openw
     const urlOverride = normalizeOpenworkServerUrl(next.urlOverride ?? "");
     const portOverride = typeof next.portOverride === "number" ? next.portOverride : undefined;
     const token = next.token?.trim() || undefined;
+    const executionMode = next.executionMode === "cloud" ? "cloud" : "local";
+    const cloudWorkerUrl = normalizeOpenworkServerUrl(next.cloudWorkerUrl ?? "") ?? undefined;
 
     if (urlOverride) {
       window.localStorage.setItem(STORAGE_URL_OVERRIDE, urlOverride);
@@ -847,6 +868,13 @@ export function writeOpenworkServerSettings(next: OpenworkServerSettings): Openw
       window.localStorage.setItem(STORAGE_TOKEN, token);
     } else {
       window.localStorage.removeItem(STORAGE_TOKEN);
+    }
+
+    window.localStorage.setItem(STORAGE_EXECUTION_MODE, executionMode);
+    if (cloudWorkerUrl) {
+      window.localStorage.setItem(STORAGE_CLOUD_WORKER_URL, cloudWorkerUrl);
+    } else {
+      window.localStorage.removeItem(STORAGE_CLOUD_WORKER_URL);
     }
 
     return readOpenworkServerSettings();
@@ -907,9 +935,23 @@ export function clearOpenworkServerSettings() {
     window.localStorage.removeItem(STORAGE_URL_OVERRIDE);
     window.localStorage.removeItem(STORAGE_PORT_OVERRIDE);
     window.localStorage.removeItem(STORAGE_TOKEN);
+    window.localStorage.removeItem(STORAGE_EXECUTION_MODE);
+    window.localStorage.removeItem(STORAGE_CLOUD_WORKER_URL);
   } catch {
     // ignore
   }
+}
+
+/** Effective OpenWork server URL: when executionMode is "cloud", uses cloudWorkerUrl (or default); else uses urlOverride. */
+export function getEffectiveOpenworkServerUrl(settings: OpenworkServerSettings): string | null {
+  const mode = settings.executionMode === "cloud" ? "cloud" : "local";
+  if (mode === "cloud") {
+    const url =
+      normalizeOpenworkServerUrl(settings.cloudWorkerUrl ?? "") ??
+      normalizeOpenworkServerUrl(DEFAULT_CLOUD_WORKER_URL);
+    return url;
+  }
+  return normalizeOpenworkServerUrl(settings.urlOverride ?? "") ?? null;
 }
 
 export function deriveOpenworkServerUrl(

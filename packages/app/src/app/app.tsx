@@ -166,6 +166,8 @@ import {
   stripOpenworkBundleInviteFromUrl,
   stripOpenworkConnectInviteFromUrl,
   createOpenworkServerClient,
+  DEFAULT_CLOUD_WORKER_URL,
+  getEffectiveOpenworkServerUrl,
   hydrateOpenworkServerSettingsFromEnv,
   normalizeOpenworkServerUrl,
   readOpenworkServerSettings,
@@ -697,23 +699,30 @@ export default function App() {
   const [devtoolsWorkspaceId, setDevtoolsWorkspaceId] = createSignal<string | null>(null);
 
   const openworkServerBaseUrl = createMemo(() => {
+    const settings = openworkServerSettings();
     const pref = startupPreference();
     const hostInfo = openworkServerHostInfo();
-    const settingsUrl = normalizeOpenworkServerUrl(openworkServerSettings().urlOverride ?? "") ?? "";
+    const settingsUrl = normalizeOpenworkServerUrl(settings.urlOverride ?? "") ?? "";
+    const effectiveCloudUrl = getEffectiveOpenworkServerUrl(settings);
 
+    if (settings.executionMode === "cloud" && effectiveCloudUrl) return effectiveCloudUrl;
     if (pref === "local") return hostInfo?.baseUrl ?? "";
-    if (pref === "server") return settingsUrl;
-    return hostInfo?.baseUrl ?? settingsUrl;
+    if (pref === "server") return (settingsUrl || effectiveCloudUrl) ?? "";
+    return (hostInfo?.baseUrl ?? settingsUrl ?? effectiveCloudUrl) ?? "";
   });
 
   const openworkServerAuth = createMemo(
     () => {
+      const settings = openworkServerSettings();
       const pref = startupPreference();
       const hostInfo = openworkServerHostInfo();
-      const settingsToken = openworkServerSettings().token?.trim() ?? "";
+      const settingsToken = settings.token?.trim() ?? "";
       const clientToken = hostInfo?.clientToken?.trim() ?? "";
       const hostToken = hostInfo?.hostToken?.trim() ?? "";
 
+      if (settings.executionMode === "cloud") {
+        return { token: settingsToken || undefined, hostToken: undefined };
+      }
       if (pref === "local") {
         return { token: clientToken || undefined, hostToken: hostToken || undefined };
       }
@@ -839,20 +848,26 @@ export default function App() {
   });
 
   createEffect(() => {
+    const settings = openworkServerSettings();
     const pref = startupPreference();
     const info = openworkServerHostInfo();
     const hostUrl = info?.connectUrl ?? info?.lanUrl ?? info?.mdnsUrl ?? info?.baseUrl ?? "";
-    const settingsUrl = normalizeOpenworkServerUrl(openworkServerSettings().urlOverride ?? "") ?? "";
+    const settingsUrl = normalizeOpenworkServerUrl(settings.urlOverride ?? "") ?? "";
+    const effectiveCloudUrl = getEffectiveOpenworkServerUrl(settings);
 
+    if (settings.executionMode === "cloud" && effectiveCloudUrl) {
+      setOpenworkServerUrl(effectiveCloudUrl);
+      return;
+    }
     if (pref === "local") {
       setOpenworkServerUrl(hostUrl);
       return;
     }
     if (pref === "server") {
-      setOpenworkServerUrl(settingsUrl);
+      setOpenworkServerUrl((settingsUrl || effectiveCloudUrl) ?? "");
       return;
     }
-    setOpenworkServerUrl(hostUrl || settingsUrl);
+    setOpenworkServerUrl((hostUrl || settingsUrl || effectiveCloudUrl) ?? "");
   });
 
   const checkOpenworkServer = async (url: string, token?: string, hostToken?: string) => {
@@ -3468,6 +3483,18 @@ export default function App() {
       return;
     }
     setDeepLinkRemoteWorkspaceDefaults(null);
+  });
+
+  const defaultCreateRemoteInitialValues = createMemo(() => {
+    const settings = openworkServerSettings();
+    const url =
+      getEffectiveOpenworkServerUrl(settings) ?? settings.urlOverride?.trim() ?? DEFAULT_CLOUD_WORKER_URL;
+    return {
+      openworkHostUrl: url,
+      openworkToken: settings.token ?? "",
+      directory: "",
+      displayName: "",
+    };
   });
 
   const editRemoteWorkspaceDefaults = createMemo(() => {
@@ -6531,7 +6558,7 @@ export default function App() {
           setDeepLinkRemoteWorkspaceDefaults(null);
         }}
         onConfirm={(input) => workspaceStore.createRemoteWorkspaceFlow(input)}
-        initialValues={deepLinkRemoteWorkspaceDefaults() ?? undefined}
+        initialValues={deepLinkRemoteWorkspaceDefaults() ?? defaultCreateRemoteInitialValues()}
         submitting={
           busy() &&
           (busyLabel() === "status.creating_workspace" || busyLabel() === "status.connecting")

@@ -11,6 +11,7 @@ import type {
   OpenworkServerDiagnostics,
   OpenworkServerSettings,
   OpenworkServerStatus,
+  DEFAULT_CLOUD_WORKER_URL,
 } from "../lib/openwork-server";
 import type {
   EngineInfo,
@@ -47,6 +48,8 @@ export type SettingsViewProps = {
   disconnectProvider: (providerId: string) => Promise<string | void>;
   openworkServerStatus: OpenworkServerStatus;
   openworkServerUrl: string;
+  openworkServerSettings: OpenworkServerSettings;
+  updateOpenworkServerSettings: (next: OpenworkServerSettings) => void;
   openworkReconnectBusy: boolean;
   reconnectOpenworkServer: () => Promise<boolean>;
   openworkServerHostInfo: OpenworkServerInfo | null;
@@ -1248,16 +1251,91 @@ export default function SettingsView(props: SettingsViewProps) {
               </Show>
             </div>
 
+            <div class="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-2xl p-5 space-y-4">
+              <div>
+                <div class="text-sm font-medium text-black dark:text-white">OWL Remote Worker</div>
+                <div class="text-xs text-gray-600 dark:text-gray-400">
+                  Configure how the OWL multi-agent framework executes tasks.
+                </div>
+              </div>
+              <div class="flex rounded-lg border border-gray-200 dark:border-gray-800 p-0.5 bg-gray-100 dark:bg-gray-900/50">
+                <button
+                  type="button"
+                  class={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+                    (props.openworkServerSettings.executionMode ?? "local") === "local"
+                      ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                  }`}
+                  onClick={() => {
+                    props.updateOpenworkServerSettings({
+                      ...props.openworkServerSettings,
+                      executionMode: "local",
+                    });
+                    void props.reconnectOpenworkServer();
+                  }}
+                >
+                  Local Worker
+                </button>
+                <button
+                  type="button"
+                  class={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+                    props.openworkServerSettings.executionMode === "cloud"
+                      ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                  }`}
+                  onClick={() => {
+                    props.updateOpenworkServerSettings({
+                      ...props.openworkServerSettings,
+                      executionMode: "cloud",
+                      cloudWorkerUrl:
+                        props.openworkServerSettings.cloudWorkerUrl?.trim() ||
+                        DEFAULT_CLOUD_WORKER_URL,
+                    });
+                    void props.reconnectOpenworkServer();
+                  }}
+                >
+                  Cloud Worker
+                </button>
+              </div>
+              <Show when={props.openworkServerSettings.executionMode === "cloud"}>
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                    Remote Worker URL
+                  </label>
+                  <input
+                    type="url"
+                    value={
+                      props.openworkServerSettings.cloudWorkerUrl?.trim() ||
+                      DEFAULT_CLOUD_WORKER_URL
+                    }
+                    onInput={(e) =>
+                      props.updateOpenworkServerSettings({
+                        ...props.openworkServerSettings,
+                        cloudWorkerUrl: e.currentTarget.value.trim() || DEFAULT_CLOUD_WORKER_URL,
+                      })
+                    }
+                    placeholder={`e.g. ${DEFAULT_CLOUD_WORKER_URL}`}
+                    class="w-full rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-black px-3 py-2 text-sm text-gray-12 placeholder:text-gray-500 focus:border-indigo-6 focus:outline-none focus:ring-1 focus:ring-indigo-6"
+                  />
+                  <p class="text-xs text-gray-500 dark:text-gray-500">
+                    The public ngrok URL pointing to your Python RunPod VPS executing the OWL agent framework.
+                  </p>
+                </div>
+              </Show>
+            </div>
+
             <div class="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-2xl p-5 space-y-3">
               <div class="text-sm font-medium text-black dark:text-white">Connection</div>
               <div class="text-xs text-gray-600 dark:text-gray-400">{props.headerStatus}</div>
-              <div class="text-xs text-gray-500 dark:text-gray-500 font-mono break-all">{props.baseUrl}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-500 font-mono break-all">
+                {props.openworkServerUrl?.trim() || props.baseUrl}
+              </div>
               <div class="pt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
                   class={compactOutlineActionClass}
                   onClick={handleReconnectOpenworkServer}
-                  disabled={props.busy || props.openworkReconnectBusy || !props.openworkServerUrl.trim()}
+                  disabled={props.busy || props.openworkReconnectBusy || !(props.openworkServerUrl?.trim() || props.baseUrl)}
                 >
                   <RefreshCcw size={14} class={`text-dls-secondary ${props.openworkReconnectBusy ? "animate-spin" : ""}`} />
                   {props.openworkReconnectBusy ? "Reconnecting..." : "Reconnect server"}

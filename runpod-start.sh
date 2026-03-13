@@ -1,8 +1,16 @@
 #!/bin/bash
 # =============================================================================
-# MAYA RunPod Startup Script
-# Starts maya-server (OpenWork backend) + opencode + ngrok tunnel
-# Usage: chmod +x runpod-start.sh && ./runpod-start.sh
+# MAYA / OpenWork RunPod Startup Script
+# Starts OpenWork server (openwork-server) + OpenCode backend + ngrok tunnel.
+# Use this to host the OpenCode backend on RunPod for remote workers.
+#
+# One-time setup on a fresh RunPod instance:
+#   apt-get update -qq && apt-get install -y curl wget git unzip lsof
+#   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+#   apt-get install -y nodejs
+#   curl -fsSL https://opencode.ai/install | sh && source ~/.bashrc
+#   git clone https://github.com/Kavin56/MAYA.git /workspace/MAYA
+#   cd /workspace/MAYA && chmod +x runpod-start.sh && ./runpod-start.sh
 # =============================================================================
 set -e
 
@@ -10,14 +18,20 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_PORT=8787
 OPENCODE_PORT=4096
 
-export NGROK_DOMAIN="unameliorative-regretably-kimberly.ngrok-free.dev"
-export NGROK_AUTHTOKEN="3AsGlODWFrruTjeoUYbH3N0uVgN_31vM8icuUDYZM11D4oqzX"
+export NGROK_DOMAIN="${NGROK_DOMAIN:-unameliorative-regretably-kimberly.ngrok-free.dev}"
+export NGROK_AUTHTOKEN="${NGROK_AUTHTOKEN:-3AsGlODWFrruTjeoUYbH3N0uVgN_31vM8icuUDYZM11D4oqzX}"
 
 echo ""
 echo "╔════════════════════════════════════════════╗"
 echo "║         MAYA RunPod Startup                ║"
 echo "╚════════════════════════════════════════════╝"
 echo ""
+
+# ─── 0. Ensure lsof (for port checks) ────────────────────────────────────────
+if ! command -v lsof &>/dev/null; then
+  echo "[0/5] Installing lsof..."
+  apt-get update -qq && apt-get install -y lsof -qq
+fi
 
 # ─── 1. Install Bun ──────────────────────────────────────────────────────────
 if ! command -v bun &>/dev/null; then
@@ -75,10 +89,11 @@ export MAYA_WORKSPACES="${MAYA_WORKSPACES:-/workspace}"
 if [ -z "$MAYA_TOKEN" ]; then
   export MAYA_TOKEN="ow-client-$(head -c 16 /dev/urandom | base64 | tr -d '/+=' | head -c 24)"
   echo "      Generated client token: $MAYA_TOKEN"
-  echo "      ⚠️  Save this token — you'll need it to connect the web UI"
+  echo "      ⚠️  Save this token — you'll need it in the web UI (Advanced / Config)"
 else
   echo "      Using MAYA_TOKEN from environment."
 fi
+export OPENWORK_TOKEN="${OPENWORK_TOKEN:-$MAYA_TOKEN}"
 
 if [ -z "$MAYA_HOST_TOKEN" ]; then
   export MAYA_HOST_TOKEN="ow-host-$(head -c 16 /dev/urandom | base64 | tr -d '/+=' | head -c 24)"
@@ -86,6 +101,7 @@ if [ -z "$MAYA_HOST_TOKEN" ]; then
 else
   echo "      Using MAYA_HOST_TOKEN from environment."
 fi
+export OPENWORK_HOST_TOKEN="${OPENWORK_HOST_TOKEN:-$MAYA_HOST_TOKEN}"
 
 echo ""
 echo "─────────────────────────────────────────────"
@@ -142,9 +158,11 @@ else
   echo "   Install: curl -fsSL https://opencode.ai/install | bash"
 fi
 
-# ─── 3. Start maya-server (OpenWork) on port 8787 ─────────────────────────────
-echo "▶ Starting OpenWork server (maya-server) on port $SERVER_PORT..."
-pnpm --filter maya-server dev \
+# ─── 3. Start OpenWork server on port 8787 ────────────────────────────────────
+# This repo: openwork-server. MAYA fork (Kavin56/MAYA): set SERVER_PACKAGE=maya-server
+SERVER_PACKAGE="${SERVER_PACKAGE:-openwork-server}"
+echo "▶ Starting OpenWork server ($SERVER_PACKAGE) on port $SERVER_PORT..."
+pnpm --filter "$SERVER_PACKAGE" dev \
   --host 0.0.0.0 \
   --port "$SERVER_PORT" \
   --approval auto \
@@ -153,14 +171,14 @@ pnpm --filter maya-server dev \
   --workspace "$MAYA_WORKSPACES" \
   > /tmp/maya-server.log 2>&1 &
 SERVER_PID=$!
-echo "  maya-server PID: $SERVER_PID"
+echo "  OpenWork server PID: $SERVER_PID"
 sleep 3
 
 set +e
 if curl -sf "http://localhost:$SERVER_PORT/health" >/dev/null; then
-  echo "  ✓ maya-server is healthy"
+  echo "  ✓ OpenWork server is healthy"
 else
-  echo "  ✗ maya-server health check failed — check /tmp/maya-server.log"
+  echo "  ✗ OpenWork server health check failed — check /tmp/maya-server.log"
   cat /tmp/maya-server.log
 fi
 set -e
@@ -176,14 +194,15 @@ echo "║    https://$NGROK_DOMAIN/health        ║"
 echo "╟────────────────────────────────────────────────────────────────╢"
 echo "║  Logs:                                                         ║"
 echo "║    opencode:    /tmp/opencode.log                              ║"
-echo "║    maya-server: /tmp/maya-server.log                           ║"
+echo "║    openwork:    /tmp/maya-server.log                          ║"
 echo "║    ngrok:       /tmp/ngrok.log                                 ║"
 echo "╟────────────────────────────────────────────────────────────────╢"
-echo "║  Set these in your Vercel / frontend:                          ║"
-echo "║  VITE_OPENWORK_URL=https://$NGROK_DOMAIN ║"
+echo "║  In the web app: Settings → Advanced → choose Cloud Worker,   ║"
+echo "║  set Remote Worker URL to the Public URL above, and set the    ║"
+echo "║  token (Config tab or Advanced) to the Client token below.    ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Client token (use in web UI): $MAYA_TOKEN"
+echo "Client token (paste in web UI Config/Advanced): $MAYA_TOKEN"
 echo ""
 
 wait $SERVER_PID

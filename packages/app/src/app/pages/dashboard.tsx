@@ -1310,6 +1310,8 @@ export default function DashboardView(props: DashboardViewProps) {
                   disconnectProvider={props.disconnectProvider}
                   openworkServerStatus={props.openworkServerStatus}
                   openworkServerUrl={props.openworkServerUrl}
+                  openworkServerSettings={props.openworkServerSettings}
+                  updateOpenworkServerSettings={props.updateOpenworkServerSettings}
                   openworkReconnectBusy={props.openworkReconnectBusy}
                   reconnectOpenworkServer={props.reconnectOpenworkServer}
                   openworkServerHostInfo={props.openworkServerHostInfo}
