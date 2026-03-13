@@ -99,10 +99,14 @@ const createTauriFetch = (auth?: OpencodeAuth) => {
     if (!authHeader || headers.has("Authorization")) return;
     headers.set("Authorization", authHeader);
   };
+  const addNgrokSkip = (headers: Headers) => {
+    headers.set("ngrok-skip-browser-warning", "1");
+  };
 
   return (input: RequestInfo | URL, init?: RequestInit) => {
     if (input instanceof Request) {
       const headers = new Headers(input.headers);
+      addNgrokSkip(headers);
       addAuth(headers);
       const request = new Request(input, { headers });
       return fetchWithTimeout(
@@ -114,6 +118,7 @@ const createTauriFetch = (auth?: OpencodeAuth) => {
     }
 
     const headers = new Headers(init?.headers);
+    addNgrokSkip(headers);
     addAuth(headers);
     return fetchWithTimeout(
       tauriFetch as unknown as typeof globalThis.fetch,
@@ -140,8 +145,11 @@ export function unwrap<T>(result: FieldsResult<T>): NonNullable<T> {
   throw new Error(message || "Unknown error");
 }
 
+/** So ngrok returns the API response instead of the browser interstitial (needed for session/inbox requests to remote worker). */
+const NGROK_SKIP_HEADER = { "ngrok-skip-browser-warning": "1" };
+
 export function createClient(baseUrl: string, directory?: string, auth?: OpencodeAuth) {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
   if (!isTauriRuntime()) {
     const authHeader = resolveAuthHeader(auth);
     if (authHeader) {
@@ -151,12 +159,20 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
 
   const fetchImpl = isTauriRuntime()
     ? createTauriFetch(auth)
-    : (input: RequestInfo | URL, init?: RequestInit) =>
-        fetchWithTimeout(globalThis.fetch, input, init, DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS);
+    : (input: RequestInfo | URL, init?: RequestInit) => {
+        const initHeaders = new Headers(init?.headers);
+        initHeaders.set("ngrok-skip-browser-warning", "1");
+        return fetchWithTimeout(
+          globalThis.fetch,
+          input,
+          { ...init, headers: initHeaders },
+          DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS,
+        );
+      };
   return createOpencodeClient({
     baseUrl,
     directory,
-    headers: Object.keys(headers).length ? headers : undefined,
+    headers,
     fetch: fetchImpl,
   });
 }
