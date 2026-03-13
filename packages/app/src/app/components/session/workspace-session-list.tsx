@@ -27,6 +27,8 @@ type Props = {
   onOpenCreateWorkspace: () => void;
   onOpenCreateRemoteWorkspace: () => void;
   onImportWorkspaceConfig: () => void;
+  /** When true (e.g. Cloud Worker mode), "Add a worker" opens Connect remote directly to add a worker on RunPod. */
+  preferRemoteWorker?: boolean;
 };
 
 const MAX_SESSIONS_PREVIEW = 6;
@@ -477,7 +479,13 @@ export default function WorkspaceSessionList(props: Props) {
         <button
           type="button"
           class="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-medium text-black border border-gray-300 bg-white hover:bg-gray-50 shadow-sm transition-colors"
-          onClick={() => setAddWorkspaceMenuOpen((prev) => !prev)}
+          onClick={() => {
+            if (props.preferRemoteWorker) {
+              props.onOpenCreateRemoteWorkspace();
+              return;
+            }
+            setAddWorkspaceMenuOpen((prev) => !prev);
+          }}
         >
           <Plus size={14} />
           Add a worker

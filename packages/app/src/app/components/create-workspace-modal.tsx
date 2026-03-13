@@ -441,14 +441,12 @@ export default function CreateWorkspaceModal(props: {
             </Button>
           </Show>
           <Button
-            onClick={() => props.onConfirm(preset(), selectedFolder())}
-            disabled={folderMode() === "runpod" || !selectedFolder() || submitting()}
+            onClick={() => props.onConfirm(preset(), effectiveFolder())}
+            disabled={!effectiveFolder() || submitting()}
             title={
-              folderMode() === "runpod"
-                ? undefined
-                : !selectedFolder()
-                  ? translate("dashboard.choose_folder_continue")
-                  : undefined
+              !effectiveFolder()
+                ? translate("dashboard.choose_folder_continue")
+                : undefined
             }
           >
             <Show when={submitting()} fallback={confirmLabel()}>
