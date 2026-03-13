@@ -1,6 +1,6 @@
 import { readdir, readFile, writeFile, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 import type { CommandItem } from "./types.js";
 import { parseFrontmatter, buildFrontmatter } from "./frontmatter.js";
 import { exists } from "./utils.js";
@@ -44,10 +44,23 @@ async function listCommandsInDir(dir: string, scope: "workspace" | "global"): Pr
   return items;
 }
 
+/** True if this looks like a remote/Unix path that would cause ENOENT when read locally (e.g. on Windows). */
+function isNonLocalWorkspacePath(workspaceRoot: string): boolean {
+  const trimmed = (workspaceRoot || "").trim();
+  if (!trimmed) return false;
+  if (platform() === "win32" && trimmed.startsWith("/") && !trimmed.startsWith("//")) {
+    return true;
+  }
+  return false;
+}
+
 export async function listCommands(workspaceRoot: string, scope: "workspace" | "global"): Promise<CommandItem[]> {
   if (scope === "global") {
     const dir = join(homedir(), ".config", "opencode", "commands");
     return listCommandsInDir(dir, "global");
+  }
+  if (isNonLocalWorkspacePath(workspaceRoot)) {
+    return [];
   }
   return listCommandsInDir(projectCommandsDir(workspaceRoot), "workspace");
 }

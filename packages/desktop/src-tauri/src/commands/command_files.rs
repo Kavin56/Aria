@@ -5,6 +5,18 @@ use std::path::PathBuf;
 use crate::types::{ExecResult, OpencodeCommand};
 use crate::workspace::commands::{sanitize_command_name, serialize_command_frontmatter};
 
+/// True if this looks like a remote/Unix path (e.g. /workspace) that would cause ENOENT when read locally on Windows.
+fn is_non_local_workspace_path(project_dir: &str) -> bool {
+    let s = project_dir.trim();
+    if s.is_empty() {
+        return false;
+    }
+    if s.starts_with('/') && !s.starts_with("//") {
+        return true;
+    }
+    false
+}
+
 fn resolve_commands_dir(scope: &str, project_dir: &str) -> Result<PathBuf, String> {
     match scope {
         "workspace" => {
@@ -51,6 +63,9 @@ fn list_command_names(dir: &PathBuf) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 pub fn opencode_command_list(scope: String, project_dir: String) -> Result<Vec<String>, String> {
+    if scope.trim() == "workspace" && is_non_local_workspace_path(project_dir.trim()) {
+        return Ok(Vec::new());
+    }
     let dir = resolve_commands_dir(scope.trim(), project_dir.trim())?;
     list_command_names(&dir)
 }
