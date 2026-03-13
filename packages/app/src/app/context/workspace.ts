@@ -765,9 +765,21 @@ export function createWorkspaceStore(options: {
             return false;
           }
 
-          const workspaceToken = next.openworkToken?.trim() ?? "";
+          let token = next.openworkToken?.trim() ?? "";
           const fallbackToken = options.openworkServerSettings().token ?? "";
-          const token = workspaceToken || fallbackToken;
+          if (!token) token = fallbackToken;
+          if (!token) {
+            const fetched = await fetchOpenworkTokenFromServer(hostUrl);
+            if (fetched) {
+              token = fetched;
+              const currentSettings = options.openworkServerSettings();
+              options.updateOpenworkServerSettings({
+                ...currentSettings,
+                urlOverride: hostUrl,
+                token: fetched,
+              });
+            }
+          }
 
           const currentSettings = options.openworkServerSettings();
           if (
@@ -785,32 +797,55 @@ export function createWorkspaceStore(options: {
           let resolvedDirectory = next.directory?.trim() ?? "";
           let workspaceInfo: OpenworkWorkspaceInfo | null = null;
           let resolvedAuth: OpencodeAuth | undefined = undefined;
+          const isAuthError = (err: unknown) => {
+            const msg = err instanceof Error ? err.message : safeStringify(err);
+            return (
+              msg.includes("Invalid bearer token") ||
+              msg.includes("Access token required") ||
+              msg.includes("rejected the access token") ||
+              (err instanceof OpenworkServerError && (err.status === 401 || err.status === 403))
+            );
+          };
 
-          try {
-            const resolved = await resolveOpenworkHost({
-              hostUrl,
-              token,
-              workspaceId: next.openworkWorkspaceId ?? null,
-              directoryHint: next.directory ?? null,
-            });
-            if (resolved.kind !== "openwork") {
-              options.setError("OpenWork server unavailable. Check the URL and token.");
-              updateWorkspaceConnectionState(id, {
-                status: "error",
-                message: "OpenWork server unavailable. Check the URL and token.",
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const resolved = await resolveOpenworkHost({
+                hostUrl,
+                token,
+                workspaceId: next.openworkWorkspaceId ?? null,
+                directoryHint: next.directory ?? null,
               });
+              if (resolved.kind !== "openwork") {
+                options.setError("OpenWork server unavailable. Check the URL and token.");
+                updateWorkspaceConnectionState(id, {
+                  status: "error",
+                  message: "OpenWork server unavailable. Check the URL and token.",
+                });
+                return false;
+              }
+              resolvedBaseUrl = resolved.opencodeBaseUrl;
+              resolvedDirectory = resolved.directory;
+              workspaceInfo = resolved.workspace;
+              resolvedAuth = resolved.auth;
+              break;
+            } catch (error) {
+              if (attempt === 0 && isAuthError(error)) {
+                const fetched = await fetchOpenworkTokenFromServer(hostUrl);
+                if (fetched) {
+                  token = fetched;
+                  options.updateOpenworkServerSettings({
+                    ...options.openworkServerSettings(),
+                    urlOverride: hostUrl,
+                    token: fetched,
+                  });
+                  continue;
+                }
+              }
+              const message = error instanceof Error ? error.message : safeStringify(error);
+              options.setError(addOpencodeCacheHint(message));
+              updateWorkspaceConnectionState(id, { status: "error", message });
               return false;
             }
-
-            resolvedBaseUrl = resolved.opencodeBaseUrl;
-            resolvedDirectory = resolved.directory;
-            workspaceInfo = resolved.workspace;
-            resolvedAuth = resolved.auth;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : safeStringify(error);
-            options.setError(addOpencodeCacheHint(message));
-            updateWorkspaceConnectionState(id, { status: "error", message });
-            return false;
           }
 
           if (!resolvedBaseUrl) {
