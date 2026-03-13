@@ -11,7 +11,7 @@ type FolderMode = "local" | "runpod";
 export default function CreateWorkspaceModal(props: {
   open: boolean;
   onClose: () => void;
-  onConfirm: (preset: WorkspacePreset, folder: string | null) => void;
+  onConfirm: (preset: WorkspacePreset, folder: string | null, options?: { folderMode?: "runpod" }) => void;
   onConfirmWorker?: (preset: WorkspacePreset, folder: string | null) => void;
   onPickFolder: () => Promise<string | null>;
   submitting?: boolean;
@@ -441,7 +441,9 @@ export default function CreateWorkspaceModal(props: {
             </Button>
           </Show>
           <Button
-            onClick={() => props.onConfirm(preset(), effectiveFolder())}
+            onClick={() =>
+              props.onConfirm(preset(), effectiveFolder(), folderMode() === "runpod" ? { folderMode: "runpod" } : undefined)
+            }
             disabled={!effectiveFolder() || submitting()}
             title={
               !effectiveFolder()

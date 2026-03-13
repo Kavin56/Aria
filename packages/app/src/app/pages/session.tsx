@@ -3346,7 +3346,6 @@ export default function SessionView(props: SessionViewProps) {
             onOpenCreateWorkspace={props.openCreateWorkspace}
             onOpenCreateRemoteWorkspace={props.openCreateRemoteWorkspace}
             onImportWorkspaceConfig={props.importWorkspaceConfig}
-            preferRemoteWorker={props.openworkServerSettings?.executionMode === "cloud"}
           />
         </div>
 

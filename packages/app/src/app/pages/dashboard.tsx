@@ -1082,7 +1082,6 @@ export default function DashboardView(props: DashboardViewProps) {
             onOpenCreateWorkspace={props.openCreateWorkspace}
             onOpenCreateRemoteWorkspace={props.openCreateRemoteWorkspace}
             onImportWorkspaceConfig={props.importWorkspaceConfig}
-            preferRemoteWorker={props.openworkServerSettings?.executionMode === "cloud"}
           />
         </div>
 
