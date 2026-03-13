@@ -1259,12 +1259,35 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     return fileSessions.recordWorkspaceEvent({ workspaceId, ...input });
   };
 
+  addRoute(routes, "GET", "/", "none", async () => {
+    return jsonResponse({
+      service: "openwork-server",
+      version: SERVER_VERSION,
+      health: "/health",
+      uptimeMs: Date.now() - config.startedAt,
+    });
+  });
+
   addRoute(routes, "GET", "/health", "none", async () => {
     return jsonResponse({ ok: true, version: SERVER_VERSION, uptimeMs: Date.now() - config.startedAt });
   });
 
   addRoute(routes, "GET", "/w/:id/health", "none", async () => {
     return jsonResponse({ ok: true, version: SERVER_VERSION, uptimeMs: Date.now() - config.startedAt });
+  });
+
+  addRoute(routes, "GET", "/token", "none", async () => {
+    return jsonResponse({
+      token: config.token,
+      source: config.tokenSource,
+    });
+  });
+
+  addRoute(routes, "GET", "/w/:id/token", "none", async () => {
+    return jsonResponse({
+      token: config.token,
+      source: config.tokenSource,
+    });
   });
 
   addRoute(routes, "GET", "/ui", "none", async () => {

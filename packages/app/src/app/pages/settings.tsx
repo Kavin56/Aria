@@ -1299,9 +1299,24 @@ export default function SettingsView(props: SettingsViewProps) {
               </div>
               <Show when={props.openworkServerSettings.executionMode === "cloud"}>
                 <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                    Remote Worker URL
-                  </label>
+                  <div class="flex items-center justify-between gap-2">
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Remote Worker URL
+                    </label>
+                    <button
+                      type="button"
+                      class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                      onClick={() => {
+                        props.updateOpenworkServerSettings({
+                          ...props.openworkServerSettings,
+                          cloudWorkerUrl: DEFAULT_CLOUD_WORKER_URL,
+                        });
+                        void props.reconnectOpenworkServer();
+                      }}
+                    >
+                      Use default
+                    </button>
+                  </div>
                   <input
                     type="url"
                     value={
@@ -1318,7 +1333,7 @@ export default function SettingsView(props: SettingsViewProps) {
                     class="w-full rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-black px-3 py-2 text-sm text-gray-12 placeholder:text-gray-500 focus:border-indigo-6 focus:outline-none focus:ring-1 focus:ring-indigo-6"
                   />
                   <p class="text-xs text-gray-500 dark:text-gray-500">
-                    The public ngrok URL pointing to your Python RunPod VPS executing the OWL agent framework.
+                    The public ngrok URL pointing to your RunPod VPS executing the OWL agent framework.
                   </p>
                 </div>
               </Show>
