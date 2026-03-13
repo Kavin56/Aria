@@ -1945,6 +1945,27 @@ export default function App() {
   };
 
   async function listCommands(): Promise<{ id: string; name: string; description?: string; source?: "command" | "mcp" | "skill" }[]> {
+    const active = workspaceStore.activeWorkspaceDisplay();
+    if (active.workspaceType === "remote" && active.remoteType === "openwork") {
+      const ow = openworkServerClient();
+      const workspaceId = openworkServerWorkspaceId();
+      if (ow && workspaceId) {
+        try {
+          const res = await ow.listCommands(workspaceId, "workspace");
+          const list = (res?.items ?? []).map((cmd) => ({
+            id: `cmd:${cmd.name}`,
+            name: cmd.name,
+            description: cmd.description,
+            source: "command" as const,
+          }));
+          if (list.some((entry) => entry.name === "compact")) return list;
+          return [BUILTIN_COMPACT_COMMAND, ...list];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
     const c = client();
     if (!c) return [];
     const list = await listCommandsTyped(c, workspaceStore.activeWorkspaceRoot().trim() || undefined);

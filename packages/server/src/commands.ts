@@ -10,7 +10,14 @@ import { ApiError } from "./errors.js";
 
 async function listCommandsInDir(dir: string, scope: "workspace" | "global"): Promise<CommandItem[]> {
   if (!(await exists(dir))) return [];
-  const entries = await readdir(dir, { withFileTypes: true });
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    const code = err && typeof err === "object" && "code" in err ? (err as NodeJS.ErrnoException).code : "";
+    if (code === "ENOENT" || code === "ENOTDIR") return [];
+    throw err;
+  }
   const items: CommandItem[] = [];
   for (const entry of entries) {
     if (!entry.isFile()) continue;
