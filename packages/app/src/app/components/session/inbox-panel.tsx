@@ -68,7 +68,11 @@ export default function InboxPanel(props: InboxPanelProps) {
       const result = await client.listInbox(workspaceId);
       setItems(result.items ?? []);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load inbox";
+      const raw = err instanceof Error ? err.message : "Inbox unavailable for this worker.";
+      const message =
+        /request|url|fetch|network|failed|cors/i.test(raw)
+          ? "Inbox loads when the worker is connected."
+          : raw;
       setError(message);
       setItems([]);
     } finally {

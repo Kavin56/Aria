@@ -1416,17 +1416,21 @@ export function createWorkspaceStore(options: {
       } catch (e) {
         options.setClient(null);
         options.setConnectedVersion(null);
-        const message = e instanceof Error ? e.message : safeStringify(e);
-        wsDebug("connect:error", { ms: Date.now() - connectStart, message });
+        const rawMessage = e instanceof Error ? e.message : safeStringify(e);
+        const message =
+          context?.workspaceType === "remote"
+            ? "Remote worker unreachable. Ensure the worker is running and the URL is correct."
+            : addOpencodeCacheHint(rawMessage);
+        wsDebug("connect:error", { ms: Date.now() - connectStart, message: rawMessage });
         connectMetrics.totalMs = Date.now() - connectStart;
         options.setOpencodeConnectStatus?.({
           ...connectMeta,
           status: "error",
-          error: addOpencodeCacheHint(message),
+          error: message,
           metrics: connectMetrics,
         });
         if (!quiet) {
-          options.setError(addOpencodeCacheHint(message));
+          options.setError(message);
         }
         return false;
       } finally {

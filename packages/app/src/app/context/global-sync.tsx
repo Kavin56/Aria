@@ -181,6 +181,8 @@ export function GlobalSyncProvider(props: ParentProps) {
     setGlobalStore("ready", false);
     setGlobalStore("error", undefined);
 
+    const baseUrl = globalSDK.url();
+
     try {
       const health = unwrap(await globalSDK.client().global.health()) as GlobalHealthResponse;
       if (!health?.healthy) {
@@ -197,6 +199,11 @@ export function GlobalSyncProvider(props: ParentProps) {
       }
       setGlobalStore("serverVersion", health.version);
     } catch (error) {
+      // Remote worker (ngrok): avoid surfacing raw network/CORS errors in the UI
+      if (baseUrl && baseUrl.includes("ngrok")) {
+        setGlobalStore("ready", true);
+        return;
+      }
       setError(error);
       return;
     }

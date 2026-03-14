@@ -222,6 +222,10 @@ Token validation is done by `TokenService` (see `packages/server/src/tokens.ts`)
   - All OpenWork and OpenCode requests go to that URL with `Authorization: Bearer <token>` and `ngrok-skip-browser-warning: 1`.  
 - **Flow**: Frontend → ngrok → OpenWork server (auth + proxy) → OpenCode → response back through ngrok to frontend.
 
+### 5.1 Redeploying the server (CORS and fixes)
+
+After changing server code (e.g. CORS in `packages/server/src/server.ts` to allow `ngrok-skip-browser-warning` in `Access-Control-Allow-Headers`), **redeploy and restart** the OpenWork server on the remote host so the browser can complete preflight and API requests. For RunPod: `git pull` in the repo (e.g. `/workspace/Aria`), then run `./runpod-start.sh` (or restart the server process). Until the server is restarted with the updated CORS, the app may show connection or “Run failed” errors when using the remote worker.
+
 ---
 
 ## 6. Key Code References
