@@ -93,9 +93,13 @@ const resolveAuthHeader = (auth?: OpencodeAuth) => {
   return encoded ? `Basic ${encoded}` : null;
 };
 
-const createTauriFetch = (auth?: OpencodeAuth) => {
-  const authHeader = resolveAuthHeader(auth);
+const createTauriFetch = (
+  auth?: OpencodeAuth,
+  getAuth?: () => OpencodeAuth | undefined,
+) => {
+  const staticAuthHeader = resolveAuthHeader(auth);
   const addAuth = (headers: Headers) => {
+    const authHeader = getAuth ? resolveAuthHeader(getAuth()) : staticAuthHeader;
     if (!authHeader || headers.has("Authorization")) return;
     headers.set("Authorization", authHeader);
   };
@@ -148,23 +152,38 @@ export function unwrap<T>(result: FieldsResult<T>): NonNullable<T> {
 /** So ngrok returns the API response instead of the browser interstitial (needed for session/inbox requests to remote worker). */
 const NGROK_SKIP_HEADER = { "ngrok-skip-browser-warning": "1" };
 
-export function createClient(baseUrl: string, directory?: string, auth?: OpencodeAuth) {
+/**
+ * Optional getter for auth so that each request uses the current token (e.g. after auto-fetch from /token).
+ * When provided, this is called on every request and overrides the static auth.
+ */
+export function createClient(
+  baseUrl: string,
+  directory?: string,
+  auth?: OpencodeAuth,
+  getAuth?: () => OpencodeAuth | undefined,
+) {
+  const staticAuthHeader = resolveAuthHeader(auth);
   const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
-  if (!isTauriRuntime()) {
-    const authHeader = resolveAuthHeader(auth);
-    if (authHeader) {
-      headers.Authorization = authHeader;
-    }
+  if (!isTauriRuntime() && staticAuthHeader) {
+    headers.Authorization = staticAuthHeader;
   }
 
-  const authHeader = resolveAuthHeader(auth);
+  const resolveAuthForRequest = (): string | null => {
+    if (getAuth) {
+      const current = getAuth();
+      return resolveAuthHeader(current);
+    }
+    return staticAuthHeader;
+  };
+
   const fetchImpl = isTauriRuntime()
-    ? createTauriFetch(auth)
+    ? createTauriFetch(auth, getAuth)
     : (input: RequestInfo | URL, init?: RequestInit) => {
         const initHeaders = new Headers(init?.headers);
         initHeaders.set("ngrok-skip-browser-warning", "1");
-        if (authHeader && !initHeaders.has("Authorization")) {
-          initHeaders.set("Authorization", authHeader);
+        const authForRequest = resolveAuthForRequest();
+        if (authForRequest && !initHeaders.has("Authorization")) {
+          initHeaders.set("Authorization", authForRequest);
         }
         return fetchWithTimeout(
           globalThis.fetch,

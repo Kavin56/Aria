@@ -145,6 +145,8 @@ export function createWorkspaceStore(options: {
   openworkServerSettings: () => OpenworkServerSettings;
   updateOpenworkServerSettings: (next: OpenworkServerSettings) => void;
   openworkServerClient?: () => OpenworkServerClient | null;
+  /** When connecting to a remote OpenWork workspace, used so each request gets the current token. */
+  getOpenworkAuthForConnect?: () => OpencodeAuth | undefined;
   setOpencodeConnectStatus?: (status: OpencodeConnectStatus | null) => void;
   onEngineStable?: () => void;
   engineRuntime?: () => EngineRuntime;
@@ -1283,7 +1285,14 @@ export function createWorkspaceStore(options: {
 
       try {
         let resolvedDirectory = directory?.trim() ?? "";
-        let nextClient = createClient(nextBaseUrl, resolvedDirectory || undefined, auth);
+        const getAuth =
+          context?.workspaceType === "remote" ? options.getOpenworkAuthForConnect : undefined;
+        let nextClient = createClient(
+          nextBaseUrl,
+          resolvedDirectory || undefined,
+          auth,
+          getAuth,
+        );
         const healthTimeoutMs = resolveConnectHealthTimeoutMs(context?.reason);
         const health = await waitForHealthy(nextClient, { timeoutMs: healthTimeoutMs });
         connectMetrics.healthyMs = Date.now() - connectStart;
@@ -1309,7 +1318,7 @@ export function createWorkspaceStore(options: {
                 syncActiveWorkspaceId(updated.activeId);
               }
               setProjectDir(resolvedDirectory);
-              nextClient = createClient(nextBaseUrl, resolvedDirectory, auth);
+              nextClient = createClient(nextBaseUrl, resolvedDirectory, auth, getAuth);
             }
           } catch (error) {
             console.log("[workspace] remote directory lookup failed", error);

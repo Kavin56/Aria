@@ -2601,6 +2601,10 @@ export default function App() {
     openworkServerSettings,
     updateOpenworkServerSettings,
     openworkServerClient,
+    getOpenworkAuthForConnect: () => {
+      const a = openworkServerAuth();
+      return a.token ? { token: a.token, mode: "openwork" as const } : undefined;
+    },
     onEngineStable: () => {},
     engineRuntime,
     developerMode,
