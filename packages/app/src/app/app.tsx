@@ -135,6 +135,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { createSessionStore } from "./context/session";
 import { createExtensionsStore } from "./context/extensions";
 import { useGlobalSync } from "./context/global-sync";
+import { useServer, normalizeServerUrl } from "./context/server";
 import { createWorkspaceStore } from "./context/workspace";
 import {
   updaterEnvironment,
@@ -682,6 +683,7 @@ export default function App() {
 
   const [baseUrl, setBaseUrl] = createSignal("http://127.0.0.1:4096");
   const [clientDirectory, setClientDirectory] = createSignal("");
+  const server = useServer();
 
   const [openworkServerSettings, setOpenworkServerSettings] = createSignal<OpenworkServerSettings>({});
   const [openworkServerUrl, setOpenworkServerUrl] = createSignal("");
@@ -3513,6 +3515,35 @@ export default function App() {
       urlOverride: hostUrl,
       token: token || settings.token,
     });
+  });
+
+  createEffect(() => {
+    const url = baseUrl().trim();
+    if (!url) return;
+    const current = normalizeServerUrl(server.url) ?? "";
+    const next = normalizeServerUrl(url) ?? "";
+    if (current !== next) {
+      server.setActive(url);
+    }
+    const active = workspaceStore.activeWorkspaceDisplay();
+    if (
+      active?.workspaceType === "remote" &&
+      active?.remoteType === "openwork" &&
+      (url.includes("ngrok") || url.startsWith("https://"))
+    ) {
+      const token =
+        active.openworkToken?.trim() ||
+        openworkServerSettings().token?.trim() ||
+        openworkServerAuth().token ||
+        "";
+      if (token && typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem("openwork.server.token", token);
+        } catch {
+          // ignore
+        }
+      }
+    }
   });
 
   const openworkServerReady = createMemo(() => openworkServerStatus() === "connected");

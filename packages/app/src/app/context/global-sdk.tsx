@@ -46,15 +46,27 @@ export function GlobalSDKProvider(props: ParentProps) {
         return "";
       }
     })();
-    const headers = token && baseUrl.includes("/opencode") ? { Authorization: `Bearer ${token}` } : undefined;
+    const headers: Record<string, string> = { ...(token && baseUrl.includes("/opencode") ? { Authorization: `Bearer ${token}` } : {}) };
+    if (baseUrl.includes("ngrok")) {
+      headers["ngrok-skip-browser-warning"] = "1";
+    }
     setUrl(baseUrl);
 
-    // Always keep the request client in sync with the active URL.
+    const fetchImpl =
+      baseUrl.includes("ngrok")
+        ? (input: RequestInfo | URL, init?: RequestInit) => {
+            const headersIn = new Headers(init?.headers);
+            headersIn.set("ngrok-skip-browser-warning", "1");
+            const f = typeof platform.fetch === "function" ? platform.fetch : globalThis.fetch;
+            return f(input, { ...init, headers: headersIn });
+          }
+        : platform.fetch;
+
     setClient(
       createOpencodeClient({
         baseUrl,
-        headers,
-        fetch: platform.fetch,
+        headers: Object.keys(headers).length ? headers : undefined,
+        fetch: fetchImpl,
         throwOnError: true,
       }),
     );
@@ -67,9 +79,9 @@ export function GlobalSDKProvider(props: ParentProps) {
     const abort = new AbortController();
     const eventClient = createOpencodeClient({
       baseUrl,
-      headers,
+      headers: Object.keys(headers).length ? headers : undefined,
       signal: abort.signal,
-      fetch: platform.fetch,
+      fetch: fetchImpl,
     });
 
     type Queued = { directory: string; payload: Event };
