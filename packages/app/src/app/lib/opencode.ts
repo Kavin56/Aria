@@ -17,6 +17,8 @@ export type OpencodeAuth = {
 const DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS = 10_000;
 const OAUTH_OPENCODE_REQUEST_TIMEOUT_MS = 5 * 60_000;
 const MCP_AUTH_OPENCODE_REQUEST_TIMEOUT_MS = 90_000;
+/** Session/prompt can take long (remote worker, ngrok). */
+const SESSION_PROMPT_REQUEST_TIMEOUT_MS = 2 * 60_000;
 
 function getRequestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
@@ -32,6 +34,9 @@ function resolveRequestTimeoutMs(input: RequestInfo | URL, fallbackMs: number): 
   }
   if (/\/mcp\/.*auth\b/.test(url)) {
     return Math.max(fallbackMs, MCP_AUTH_OPENCODE_REQUEST_TIMEOUT_MS);
+  }
+  if (/\/session\/[^/]+\/prompt_async\b/.test(url) || /\/session\/[^/]+\/messages\b/.test(url)) {
+    return Math.max(fallbackMs, SESSION_PROMPT_REQUEST_TIMEOUT_MS);
   }
   return fallbackMs;
 }
@@ -178,19 +183,30 @@ export function createClient(
 
   const fetchImpl = isTauriRuntime()
     ? createTauriFetch(auth, getAuth)
-    : (input: RequestInfo | URL, init?: RequestInit) => {
-        const initHeaders = new Headers(init?.headers);
-        initHeaders.set("ngrok-skip-browser-warning", "1");
-        const authForRequest = resolveAuthForRequest();
-        if (authForRequest && !initHeaders.has("Authorization")) {
-          initHeaders.set("Authorization", authForRequest);
+    : async (input: RequestInfo | URL, init?: RequestInit) => {
+        const doFetch = () => {
+          const initHeaders = new Headers(init?.headers);
+          initHeaders.set("ngrok-skip-browser-warning", "1");
+          const authForRequest = resolveAuthForRequest();
+          if (authForRequest && !initHeaders.has("Authorization")) {
+            initHeaders.set("Authorization", authForRequest);
+          }
+          return fetchWithTimeout(
+            globalThis.fetch,
+            input,
+            { ...init, headers: initHeaders },
+            DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS,
+          );
+        };
+        try {
+          return await doFetch();
+        } catch (first) {
+          const isAbort =
+            first instanceof Error && (first.name === "AbortError" || first.message === "Request timed out.");
+          if (isAbort) throw first;
+          await new Promise((r) => setTimeout(r, 800));
+          return await doFetch();
         }
-        return fetchWithTimeout(
-          globalThis.fetch,
-          input,
-          { ...init, headers: initHeaders },
-          DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS,
-        );
       };
   return createOpencodeClient({
     baseUrl,

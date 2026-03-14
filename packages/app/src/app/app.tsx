@@ -712,6 +712,10 @@ export default function App() {
     return (hostInfo?.baseUrl ?? settingsUrl ?? effectiveCloudUrl) ?? "";
   });
 
+  const [activeRemoteOpenworkToken, setActiveRemoteOpenworkToken] = createSignal<string | undefined>(
+    undefined,
+  );
+
   const openworkServerAuth = createMemo(
     () => {
       const settings = openworkServerSettings();
@@ -720,20 +724,30 @@ export default function App() {
       const settingsToken = settings.token?.trim() ?? "";
       const clientToken = hostInfo?.clientToken?.trim() ?? "";
       const hostToken = hostInfo?.hostToken?.trim() ?? "";
+      const fromActiveWorkspace = activeRemoteOpenworkToken()?.trim() ?? "";
 
       if (settings.executionMode === "cloud") {
-        return { token: settingsToken || undefined, hostToken: undefined };
+        return {
+          token: (settingsToken || fromActiveWorkspace) || undefined,
+          hostToken: undefined,
+        };
       }
       if (pref === "local") {
         return { token: clientToken || undefined, hostToken: hostToken || undefined };
       }
       if (pref === "server") {
-        return { token: settingsToken || undefined, hostToken: undefined };
+        return {
+          token: (settingsToken || fromActiveWorkspace) || undefined,
+          hostToken: undefined,
+        };
       }
       if (hostInfo?.baseUrl) {
         return { token: clientToken || undefined, hostToken: hostToken || undefined };
       }
-      return { token: settingsToken || undefined, hostToken: undefined };
+      return {
+        token: (settingsToken || fromActiveWorkspace) || undefined,
+        hostToken: undefined,
+      };
     },
     undefined,
     {
@@ -934,7 +948,26 @@ export default function App() {
           result.status === "connected" || result.status === "limited"
             ? 10_000
             : Math.min(delayMs * 2, 60_000);
-      } catch {
+      } catch (err) {
+        if (active && err instanceof OpenworkServerError && (err.status === 401 || err.status === 403)) {
+          const fetched = await fetchOpenworkTokenFromServer(url);
+          if (fetched) {
+            const settings = openworkServerSettings();
+            updateOpenworkServerSettings({ ...settings, urlOverride: url, token: fetched });
+            const activeId = workspaceStore.activeWorkspaceId();
+            const ws = workspaceStore.workspaces().find((w) => w.id === activeId);
+            if (
+              ws?.workspaceType === "remote" &&
+              ws.remoteType === "openwork" &&
+              (normalizeOpenworkServerUrl(ws.openworkHostUrl ?? "") ?? "") ===
+                (normalizeOpenworkServerUrl(url) ?? "")
+            ) {
+              void workspaceStore.updateRemoteWorkspaceFlow(activeId!, {
+                openworkToken: fetched,
+              });
+            }
+          }
+        }
         delayMs = Math.min(delayMs * 2, 60_000);
       } finally {
         if (!active) return;
@@ -1428,7 +1461,7 @@ export default function App() {
     return fallback;
   };
 
-  async function sendPrompt(draft?: ComposerDraft) {
+  async function sendPrompt(draft?: ComposerDraft, options?: { isRetry?: boolean }) {
     const hasExplicitDraft = Boolean(draft);
     const fallbackText = prompt().trim();
     const resolvedDraft: ComposerDraft = draft ?? {
@@ -1561,13 +1594,44 @@ export default function App() {
         command: commandName,
       });
     } catch (e) {
+      const message = e instanceof Error ? e.message : safeStringify(e);
+      const isRetriable =
+        !options?.isRetry &&
+        (message.includes("Request failed") ||
+          message.includes("unauthorized") ||
+          message.includes("Invalid bearer token") ||
+          message.includes("401") ||
+          message.includes("error sending request"));
+      const active = workspaceStore.activeWorkspaceDisplay();
+      const hostUrl =
+        active?.workspaceType === "remote" && active?.remoteType === "openwork"
+          ? (normalizeOpenworkServerUrl(active.openworkHostUrl ?? "") ?? "").trim()
+          : "";
+      if (isRetriable && hostUrl) {
+        const fetched = await fetchOpenworkTokenFromServer(hostUrl);
+        if (fetched) {
+          const settings = openworkServerSettings();
+          updateOpenworkServerSettings({ ...settings, urlOverride: hostUrl, token: fetched });
+          const activeId = workspaceStore.activeWorkspaceId();
+          const ws = workspaceStore.workspaces().find((w) => w.id === activeId);
+          if (
+            activeId &&
+            ws?.workspaceType === "remote" &&
+            ws.remoteType === "openwork" &&
+            (normalizeOpenworkServerUrl(ws.openworkHostUrl ?? "") ?? "") ===
+              (normalizeOpenworkServerUrl(hostUrl) ?? "")
+          ) {
+            await workspaceStore.updateRemoteWorkspaceFlow(activeId, { openworkToken: fetched });
+          }
+          return sendPrompt(draft, { isRetry: true });
+        }
+      }
       finishPerf(perfEnabled, "session.prompt", "error", startedAt, {
         sessionID,
         mode: resolvedDraft.mode,
         command: commandName,
-        error: e instanceof Error ? e.message : safeStringify(e),
+        error: message,
       });
-      const message = e instanceof Error ? e.message : safeStringify(e);
       sessionStore.appendSessionErrorTurn(sessionID, addOpencodeCacheHint(message));
     } finally {
       setBusy(false);
@@ -2660,6 +2724,32 @@ export default function App() {
     });
   };
 
+  createEffect(() => {
+    const active = workspaceStore.activeWorkspaceDisplay();
+    const baseUrl = openworkServerBaseUrl().trim();
+    if (
+      !baseUrl ||
+      !active ||
+      active.workspaceType !== "remote" ||
+      active.remoteType !== "openwork" ||
+      !active.openworkHostUrl?.trim()
+    ) {
+      setActiveRemoteOpenworkToken(undefined);
+      return;
+    }
+    const hostNorm = normalizeOpenworkServerUrl(active.openworkHostUrl) ?? "";
+    const baseNorm = normalizeOpenworkServerUrl(baseUrl) ?? "";
+    const match =
+      hostNorm === baseNorm ||
+      baseNorm.startsWith(hostNorm + "/") ||
+      hostNorm.startsWith(baseNorm + "/");
+    if (match && active.openworkToken?.trim()) {
+      setActiveRemoteOpenworkToken(active.openworkToken.trim());
+    } else {
+      setActiveRemoteOpenworkToken(undefined);
+    }
+  });
+
   const resolveSidebarClientConfig = (workspaceId: string) => {
     const workspace = workspaceStore.workspaces().find((entry) => entry.id === workspaceId) ?? null;
     if (!workspace) return null;
@@ -3453,16 +3543,39 @@ export default function App() {
     setOpenworkServerSettings({});
   };
 
-  // Auto-fetch token from GET /token when Remote Worker URL is set but token is empty (no manual paste needed)
+  // Auto-fetch token from GET /token when Remote Worker URL is set but token is empty (no manual paste needed).
+  // Use URL from settings or from active remote workspace so we fetch even when only the workspace has the host URL.
   createEffect(() => {
     const settings = openworkServerSettings();
-    const url = getEffectiveOpenworkServerUrl(settings) ?? settings.urlOverride?.trim() ?? "";
-    const token = settings.token?.trim() ?? "";
+    const active = workspaceStore.activeWorkspaceDisplay();
+    const urlFromSettings = getEffectiveOpenworkServerUrl(settings) ?? settings.urlOverride?.trim() ?? "";
+    const urlFromWorkspace =
+      active?.workspaceType === "remote" && active?.remoteType === "openwork"
+        ? (normalizeOpenworkServerUrl(active.openworkHostUrl ?? "") ?? "").trim()
+        : "";
+    const url = urlFromSettings || urlFromWorkspace;
+    const tokenFromSettings = settings.token?.trim() ?? "";
+    const tokenFromWorkspace =
+      active?.workspaceType === "remote" && active?.remoteType === "openwork"
+        ? (active.openworkToken ?? "").trim()
+        : "";
+    const token = tokenFromSettings || tokenFromWorkspace;
     if (!url || token) return;
     void (async () => {
       const fetched = await fetchOpenworkTokenFromServer(url);
       if (fetched) {
-        updateOpenworkServerSettings({ ...settings, token: fetched });
+        const nextSettings = { ...settings, urlOverride: url || settings.urlOverride, token: fetched };
+        updateOpenworkServerSettings(nextSettings);
+        const activeId = workspaceStore.activeWorkspaceId();
+        const ws = workspaceStore.workspaces().find((w) => w.id === activeId);
+        if (
+          activeId &&
+          ws?.workspaceType === "remote" &&
+          ws.remoteType === "openwork" &&
+          (normalizeOpenworkServerUrl(ws.openworkHostUrl ?? "") ?? "") === (normalizeOpenworkServerUrl(url) ?? "")
+        ) {
+          void workspaceStore.updateRemoteWorkspaceFlow(activeId, { openworkToken: fetched });
+        }
       }
     })();
   });
