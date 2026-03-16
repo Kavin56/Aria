@@ -40,6 +40,7 @@ import type {
   OpenworkServerStatus,
 } from "../lib/openwork-server";
 import type { EngineInfo, OrchestratorStatus, OpenworkServerInfo, OpenCodeRouterInfo, WorkspaceInfo } from "../lib/tauri";
+import { opencodeRouterRestart, openworkServerRestart } from "../lib/tauri";
 import { DEFAULT_OPENWORK_PUBLISHER_BASE_URL, publishOpenworkBundleJson } from "../lib/publisher";
 
 import Button from "../components/button";
@@ -455,6 +456,36 @@ export default function DashboardView(props: DashboardViewProps) {
       // Errors are surfaced in the modal.
     } finally {
       setProviderAuthActionBusy(false);
+    }
+  };
+
+  /** Start or restart OpenCode Router so Messaging works without manual Settings steps. */
+  const ensureOpenCodeRouterRunning = async (): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    const workspacePath =
+      props.opencodeRouterInfo?.workspacePath?.trim() || props.engineInfo?.projectDir?.trim();
+    if (!workspacePath) return;
+    const opencodeUrl =
+      props.opencodeRouterInfo?.opencodeUrl?.trim() || props.engineInfo?.baseUrl?.trim();
+    const healthPort = props.opencodeRouterInfo?.healthPort ?? undefined;
+    try {
+      await opencodeRouterRestart({
+        workspacePath,
+        opencodeUrl: opencodeUrl || undefined,
+        opencodeUsername: props.engineInfo?.opencodeUsername?.trim() || undefined,
+        opencodePassword: props.engineInfo?.opencodePassword?.trim() || undefined,
+        healthPort,
+      });
+      if (healthPort === undefined) {
+        try {
+          await openworkServerRestart();
+          await props.reconnectOpenworkServer();
+        } catch {
+          // Non-fatal
+        }
+      }
+    } catch {
+      // Caller can refresh and show state
     }
   };
 
@@ -1236,6 +1267,8 @@ export default function DashboardView(props: DashboardViewProps) {
                 openworkServerWorkspaceId={props.openworkServerWorkspaceId}
                 activeWorkspaceRoot={props.activeWorkspaceRoot}
                 developerMode={props.developerMode}
+                opencodeRouterHealthPort={props.opencodeRouterInfo?.healthPort ?? null}
+                ensureOpenCodeRouterRunning={ensureOpenCodeRouterRunning}
               />
             </Match>
 

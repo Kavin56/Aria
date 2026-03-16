@@ -34,6 +34,10 @@ export type IdentitiesViewProps = {
   openworkServerWorkspaceId: string | null;
   activeWorkspaceRoot: string;
   developerMode: boolean;
+  /** Optional OpenCode Router health port so we can tell the server which router instance to apply changes to. */
+  opencodeRouterHealthPort?: number | null;
+  /** When provided, Messaging can auto-start the router when unreachable (local) and retry Create public bot. */
+  ensureOpenCodeRouterRunning?: () => Promise<void>;
 };
 
 const OPENCODE_ROUTER_AGENT_FILE_PATH = ".opencode/agents/opencode-router.md";
@@ -178,6 +182,9 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
 
   const [reconnectStatus, setReconnectStatus] = createSignal<string | null>(null);
   const [reconnectError, setReconnectError] = createSignal<string | null>(null);
+
+  /** Guard so we only auto-start the router once per "not reachable" state. */
+  const [routerAutoStartAttempted, setRouterAutoStartAttempted] = createSignal(false);
 
   const workspaceId = createMemo(() => {
     const explicitId = props.openworkServerWorkspaceId?.trim() ?? "";
@@ -432,8 +439,12 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
 
       const [healthRes, tgRes, slackRes, telegramInfo] = await Promise.all([
         client.opencodeRouterHealth(),
-        client.getOpenCodeRouterTelegramIdentities(id),
-        client.getOpenCodeRouterSlackIdentities(id),
+        client.getOpenCodeRouterTelegramIdentities(id, {
+          healthPort: props.opencodeRouterHealthPort ?? undefined,
+        }),
+        client.getOpenCodeRouterSlackIdentities(id, {
+          healthPort: props.opencodeRouterHealthPort ?? undefined,
+        }),
         client.getOpenCodeRouterTelegram(id).catch(() => null),
       ]);
 
@@ -517,12 +528,17 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
     setTelegramSaving(true);
     setTelegramStatus(null);
     setTelegramError(null);
-    try {
-      const result = await client.upsertOpenCodeRouterTelegramIdentity(id, {
-        token,
-        enabled: telegramEnabled(),
-        access,
-      });
+
+    const performUpsert = async (): Promise<boolean> => {
+      const result = await client!.upsertOpenCodeRouterTelegramIdentity(
+        id!,
+        {
+          token,
+          enabled: telegramEnabled(),
+          access,
+        },
+        { healthPort: props.opencodeRouterHealthPort ?? undefined },
+      );
       if (result.ok) {
         const pairingCode = typeof result.telegram?.pairingCode === "string" ? result.telegram.pairingCode.trim() : "";
         if (access === "private" && pairingCode) {
@@ -550,9 +566,35 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
         setTelegramError(result.applyError.trim());
       }
       setTelegramToken("");
-      void refreshAll({ force: true });
+      if (props.ensureOpenCodeRouterRunning) {
+        try {
+          // Ensure the router picks up the new token/config so the channel moves to Active/On.
+          await props.ensureOpenCodeRouterRunning();
+        } catch {
+          // Non-fatal: UI will still refresh and can show any remaining errors.
+        }
+      }
+      await refreshAll({ force: true });
+      return result.ok;
+    };
+
+    try {
+      await performUpsert();
     } catch (error) {
-      setTelegramError(formatRequestError(error));
+      const msg = formatRequestError(error);
+      const isNotReachable =
+        (error instanceof OpenworkServerError && (error.status === 503 || (error.message && error.message.toLowerCase().includes("not reachable")))) ||
+        (typeof msg === "string" && msg.toLowerCase().includes("not reachable"));
+      if (isNotReachable && props.ensureOpenCodeRouterRunning) {
+        try {
+          await props.ensureOpenCodeRouterRunning();
+          await performUpsert();
+        } catch (retryError) {
+          setTelegramError(formatRequestError(retryError));
+        }
+      } else {
+        setTelegramError(msg);
+      }
     } finally {
       setTelegramSaving(false);
     }
@@ -697,6 +739,21 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
     onCleanup(() => window.clearInterval(interval));
   });
 
+  /** When Messaging loads with "not reachable" on a local worker, auto-start the router once. */
+  createEffect(() => {
+    const err = healthError();
+    if (!err || !err.toLowerCase().includes("not reachable")) return;
+    const url = props.openworkServerUrl.trim();
+    const isLocal =
+      url.includes("127.0.0.1") || url.includes("localhost") || url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost");
+    if (!isLocal || !props.ensureOpenCodeRouterRunning || routerAutoStartAttempted()) return;
+    setRouterAutoStartAttempted(true);
+    void (async () => {
+      await props.ensureOpenCodeRouterRunning!();
+      await refreshAll({ force: true });
+    })();
+  });
+
   const toggleExpand = (channel: string) => {
     setExpandedChannel((prev) => (prev === channel ? null : channel));
   };
@@ -817,7 +874,36 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
 
           <Show when={healthError()}>
             {(value) => (
-              <div class="rounded-lg border border-red-7/20 bg-red-1/30 px-3 py-2 text-xs text-red-12">{value()}</div>
+              <div class="space-y-2">
+                <div class="rounded-lg border border-red-7/20 bg-red-1/30 px-3 py-2 text-xs text-red-12">{value()}</div>
+                <Show
+                  when={
+                    typeof value() === "string" &&
+                    (value().toLowerCase().includes("not configured on this host") ||
+                      value().toLowerCase().includes("opencoderouter is not configured"))
+                  }
+                >
+                  <div class="rounded-lg border border-amber-7/25 bg-amber-1/30 px-3 py-2 text-xs text-amber-12">
+                    <strong>To connect Telegram or Slack:</strong> Messaging only works when the OpenWork host runs
+                    OpenCode Router. You’re connected to a remote workspace that doesn’t have it. Switch to your{" "}
+                    <strong>local workspace (Starter)</strong> in the left sidebar to use Messaging and connect
+                    Telegram, or run the remote host with OpenCode Router enabled.
+                  </div>
+                </Show>
+                <Show
+                  when={
+                    typeof value() === "string" &&
+                    value().toLowerCase().includes("not reachable")
+                  }
+                >
+                  <div class="rounded-lg border border-amber-7/25 bg-amber-1/30 px-3 py-2 text-xs text-amber-12">
+                    <strong>OpenCode Router isn’t running.</strong> Open <strong>Settings</strong> (gear icon at bottom
+                    right), scroll to <strong>OpenCode Router</strong>, and click <strong>Restart OpenCode Router</strong>.
+                    If it still fails, try stopping the host (Settings) and opening <strong>Starter</strong> again to
+                    restart the worker and router.
+                  </div>
+                </Show>
+              </div>
             )}
           </Show>
 
@@ -956,6 +1042,20 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
                     </Show>
                     <Show when={telegramError()}>
                       {(value) => <div class="text-[11px] text-red-12">{value()}</div>}
+                    </Show>
+                    <Show
+                      when={
+                        hasTelegramConnected() &&
+                        !telegramIdentities().some((i) => i.running) &&
+                        isWorkerOnline() &&
+                        !props.ensureOpenCodeRouterRunning
+                      }
+                    >
+                      <div class="rounded-lg border border-amber-7/25 bg-amber-1/30 px-3 py-2 text-[11px] text-amber-12">
+                        Bot is saved but not running. Open <strong>Settings</strong> (gear icon at bottom right),
+                        scroll to <strong>OpenCode Router</strong>, and click <strong>Restart OpenCode Router</strong> so
+                        it loads the token and starts the Telegram bridge.
+                      </div>
                     </Show>
                   </Show>
 
