@@ -12,6 +12,7 @@ _worktrees/
 # Tauri/Rust
 packages/desktop/src-tauri/target/
 packages/desktop/src-tauri/sidecars/
+packages/desktop/src-tauri/NONE
 
 # Env
 .env

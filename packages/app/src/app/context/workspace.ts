@@ -859,6 +859,14 @@ export function createWorkspaceStore(options: {
             return false;
           }
 
+          const authToken = resolvedAuth?.token ?? token;
+          if (authToken && typeof window !== "undefined") {
+            try {
+              window.localStorage.setItem("openwork.server.token", authToken);
+            } catch {
+              // ignore
+            }
+          }
           const ok = await connectToServer(
             resolvedBaseUrl,
             resolvedDirectory || undefined,
@@ -1932,6 +1940,13 @@ export function createWorkspaceStore(options: {
       return false;
     }
 
+    if (tokenToUse && typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("openwork.server.token", tokenToUse);
+      } catch {
+        // ignore
+      }
+    }
     const ok = await connectToServer(
       resolvedBaseUrl,
       resolvedDirectory || undefined,
@@ -2123,6 +2138,13 @@ export function createWorkspaceStore(options: {
       return false;
     }
 
+    if (token && typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("openwork.server.token", token);
+      } catch {
+        // ignore
+      }
+    }
     const isActive = activeWorkspaceId() === id;
     const finalDirectory = resolvedDirectory || "";
 
@@ -3120,12 +3142,14 @@ export function createWorkspaceStore(options: {
       }
     }
 
+    const activeWorkspace = activeWorkspaceInfo();
     const info = engine();
-    if (info?.baseUrl) {
+    // Do not overwrite remote workspace baseUrl with local engine URL (would switch
+    // GlobalSDK and server to 127.0.0.1 and cause connection refused / wrong host).
+    if (info?.baseUrl && activeWorkspace?.workspaceType !== "remote") {
       options.setBaseUrl(info.baseUrl);
     }
 
-    const activeWorkspace = activeWorkspaceInfo();
     if (activeWorkspace?.workspaceType === "remote") {
       options.setStartupPreference("server");
       options.setOnboardingStep("connecting");

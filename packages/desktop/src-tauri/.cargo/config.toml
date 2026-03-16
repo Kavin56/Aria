@@ -1,0 +1,7 @@
+# Avoid LNK1140 "limit exceeded for program database" and reduce disk use on Windows
+# when running `pnpm dev` (debug build). PDB files are large; /PDB:NONE skips them.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/PDB:NONE"]
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/PDB:NONE"]

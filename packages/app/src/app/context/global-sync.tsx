@@ -18,6 +18,7 @@ import type {
 
 import type { McpStatusMap, TodoItem } from "../types";
 import { unwrap } from "../lib/opencode";
+import { fetchOpenworkTokenFromServer } from "../lib/openwork-server";
 import { safeStringify } from "../utils";
 import { mapConfigProvidersToList } from "../utils/providers";
 import { useGlobalSDK } from "./global-sdk";
@@ -199,8 +200,27 @@ export function GlobalSyncProvider(props: ParentProps) {
       }
       setGlobalStore("serverVersion", health.version);
     } catch (error) {
-      // Remote worker (ngrok): avoid surfacing raw network/CORS errors in the UI
+      // Remote worker (ngrok): try token refetch on 401, then avoid surfacing raw errors in the UI
       if (baseUrl && baseUrl.includes("ngrok")) {
+        const msg = error instanceof Error ? error.message : safeStringify(error);
+        const is401 = msg.includes("401") || (error && typeof error === "object" && "status" in error && (error as { status?: number }).status === 401);
+        if (is401 && typeof window !== "undefined") {
+          try {
+            const host = baseUrl.includes("/w/") ? baseUrl.split("/w/")[0].replace(/\/+$/, "") : baseUrl.replace(/\/+$/, "");
+            const token = await fetchOpenworkTokenFromServer(host);
+            if (token) {
+              window.localStorage.setItem("openwork.server.token", token);
+              const health = unwrap(await globalSDK.client().global.health()) as GlobalHealthResponse;
+              if (health?.healthy) {
+                setGlobalStore("serverVersion", health.version);
+                setGlobalStore("ready", true);
+                return;
+              }
+            }
+          } catch {
+            // fall through to graceful degradation
+          }
+        }
         setGlobalStore("ready", true);
         return;
       }

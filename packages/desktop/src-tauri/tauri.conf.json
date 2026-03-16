@@ -23,7 +23,9 @@
     }
   },
   "bundle": {
+    "active": true,
     "createUpdaterArtifacts": true,
+    "targets": ["nsis"],
     "macOS": {
       "entitlements": "./entitlements.plist"
     },

@@ -10,6 +10,7 @@ import {
   readFileSync,
   readSync,
   readdirSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -30,6 +31,14 @@ const readArg = (name) => {
 
 const hasFlag = (name) => process.argv.slice(2).includes(name);
 const forceBuild = hasFlag("--force") || process.env.OPENWORK_SIDECAR_FORCE_BUILD === "1";
+
+const isBunAvailable = () => {
+  const r = spawnSync("bun", ["--version"], {
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  });
+  return r.status === 0;
+};
 const sidecarOverride = process.env.OPENWORK_SIDECAR_DIR?.trim() || readArg("--outdir");
 const sidecarDir = sidecarOverride ? resolve(sidecarOverride) : join(__dirname, "..", "src-tauri", "sidecars");
 const packageJsonPath = resolve(__dirname, "..", "package.json");
@@ -323,6 +332,16 @@ const shouldBuildOpenworkServer =
   forceBuild || !existsSync(openworkServerBuildPath) || isStubBinary(openworkServerBuildPath);
 
 if (shouldBuildOpenworkServer) {
+  if (!isBunAvailable()) {
+    console.error(
+      "[openwork] Bun is required to build sidecars but was not found in PATH.\n" +
+        "Install Bun, then run `pnpm dev` again.\n\n" +
+        "  Windows (PowerShell): irm bun.sh/install.ps1 | iex\n" +
+        "  Or with npm:          npm install -g bun\n" +
+        "  See https://bun.sh/docs/installation\n"
+    );
+    process.exit(1);
+  }
   mkdirSync(sidecarDir, { recursive: true });
   if (existsSync(openworkServerBuildPath)) {
     try {
@@ -450,8 +469,22 @@ if (shouldDownloadOpencode) {
   const archivePath = join(tmpdir(), `opencode-${stamp}-${opencodeAsset}`);
   const extractDir = join(tmpdir(), `opencode-${stamp}`);
 
+  const cleanupTemp = () => {
+    try {
+      if (existsSync(extractDir)) rmSync(extractDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+    try {
+      if (existsSync(archivePath)) unlinkSync(archivePath);
+    } catch {
+      // ignore
+    }
+  };
+
   mkdirSync(extractDir, { recursive: true });
 
+  try {
   if (process.platform === "win32") {
     const psQuote = (value) => `'${value.replace(/'/g, "''")}'`;
     const psScript = [
@@ -465,6 +498,7 @@ if (shouldDownloadOpencode) {
     });
 
     if (result.status !== 0) {
+      cleanupTemp();
       process.exit(result.status ?? 1);
     }
   } else {
@@ -472,6 +506,7 @@ if (shouldDownloadOpencode) {
       stdio: "inherit",
     });
     if (downloadResult.status !== 0) {
+      cleanupTemp();
       process.exit(downloadResult.status ?? 1);
     }
 
@@ -482,6 +517,7 @@ if (shouldDownloadOpencode) {
         stdio: "inherit",
       });
       if (unzipResult.status !== 0) {
+        cleanupTemp();
         process.exit(unzipResult.status ?? 1);
       }
     } else if (opencodeAsset.endsWith(".tar.gz")) {
@@ -489,10 +525,12 @@ if (shouldDownloadOpencode) {
         stdio: "inherit",
       });
       if (tarResult.status !== 0) {
+        cleanupTemp();
         process.exit(tarResult.status ?? 1);
       }
     } else {
       console.error(`Unknown OpenCode archive type: ${opencodeAsset}`);
+      cleanupTemp();
       process.exit(1);
     }
   }
@@ -500,6 +538,7 @@ if (shouldDownloadOpencode) {
   const extractedBinary = findOpencodeBinary(extractDir);
   if (!extractedBinary) {
     console.error("OpenCode binary not found after extraction.");
+    cleanupTemp();
     process.exit(1);
   }
 
@@ -520,7 +559,11 @@ if (shouldDownloadOpencode) {
     }
   }
 
+  cleanupTemp();
   console.log(`OpenCode sidecar updated to ${normalizedOpencodeVersion}.`);
+  } finally {
+    cleanupTemp();
+  }
 }
 
 const opencodeRouterPkgRaw = readFileSync(resolve(opencodeRouterDir, "package.json"), "utf8");

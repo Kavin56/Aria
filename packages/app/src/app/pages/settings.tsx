@@ -529,6 +529,8 @@ export default function SettingsView(props: SettingsViewProps) {
     const opencodeUrl = props.opencodeRouterInfo?.opencodeUrl?.trim() || props.engineInfo?.baseUrl?.trim();
     const opencodeUsername = props.engineInfo?.opencodeUsername?.trim() || undefined;
     const opencodePassword = props.engineInfo?.opencodePassword?.trim() || undefined;
+    // Reuse the same health port so the OpenWork server (which already has this port in env) can still reach the router.
+    const healthPort = props.opencodeRouterInfo?.healthPort ?? undefined;
     if (!workspacePath) {
       setOpenCodeRouterRestartError("No worker path available");
       return;
@@ -541,7 +543,17 @@ export default function SettingsView(props: SettingsViewProps) {
         opencodeUrl: opencodeUrl || undefined,
         opencodeUsername,
         opencodePassword,
+        healthPort,
       });
+      // If we had no previous port, the router now has a new port; restart the server so it picks up that port.
+      if (healthPort === undefined && isTauriRuntime()) {
+        try {
+          await openworkServerRestart();
+          await props.reconnectOpenworkServer();
+        } catch {
+          // Non-fatal: server may already have a port from a previous run
+        }
+      }
     } catch (e) {
       setOpenCodeRouterRestartError(e instanceof Error ? e.message : String(e));
     } finally {

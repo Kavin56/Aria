@@ -681,7 +681,17 @@ export default function App() {
 
   const [engineRuntime, setEngineRuntime] = createSignal<EngineRuntime>("openwork-orchestrator");
 
-  const [baseUrl, setBaseUrl] = createSignal("http://127.0.0.1:4096");
+  const getInitialBaseUrl = (): string => {
+    if (typeof window === "undefined") return "http://127.0.0.1:4096";
+    try {
+      const stored = window.localStorage.getItem("openwork.baseUrl")?.trim();
+      if (stored && (stored.includes("ngrok") || stored.startsWith("https://"))) return stored;
+    } catch {
+      // ignore
+    }
+    return "http://127.0.0.1:4096";
+  };
+  const [baseUrl, setBaseUrl] = createSignal(getInitialBaseUrl());
   const [clientDirectory, setClientDirectory] = createSignal("");
   const server = useServer();
 
@@ -2669,7 +2679,12 @@ export default function App() {
     openworkServerClient,
     getOpenworkAuthForConnect: () => {
       const a = openworkServerAuth();
-      return a.token ? { token: a.token, mode: "openwork" as const } : undefined;
+      const stored =
+        typeof window !== "undefined"
+          ? (window.localStorage.getItem("openwork.server.token") ?? "").trim()
+          : "";
+      const token = a?.token || stored;
+      return token ? { token, mode: "openwork" as const } : undefined;
     },
     onEngineStable: () => {},
     engineRuntime,
@@ -3520,17 +3535,12 @@ export default function App() {
   createEffect(() => {
     const url = baseUrl().trim();
     if (!url) return;
-    const current = normalizeServerUrl(server.url) ?? "";
-    const next = normalizeServerUrl(url) ?? "";
-    if (current !== next) {
-      server.setActive(url);
-    }
     const active = workspaceStore.activeWorkspaceDisplay();
-    if (
+    const isRemoteNgrok =
+      (url.includes("ngrok") || url.startsWith("https://")) &&
       active?.workspaceType === "remote" &&
-      active?.remoteType === "openwork" &&
-      (url.includes("ngrok") || url.startsWith("https://"))
-    ) {
+      active?.remoteType === "openwork";
+    if (isRemoteNgrok) {
       const token =
         active.openworkToken?.trim() ||
         openworkServerSettings().token?.trim() ||
@@ -3543,6 +3553,11 @@ export default function App() {
           // ignore
         }
       }
+    }
+    const current = normalizeServerUrl(server.url) ?? "";
+    const next = normalizeServerUrl(url) ?? "";
+    if (current !== next) {
+      server.setActive(url);
     }
   });
 
@@ -5241,14 +5256,15 @@ export default function App() {
 
     if (typeof window !== "undefined") {
       try {
-        // In Tauri/desktop mode, do NOT restore the cached baseUrl from localStorage.
-        // OpenCode is assigned a random port on every restart, so the stored URL is
-        // always stale after a relaunch. The correct baseUrl is provided by engine_info().
-        // Web mode still needs the cached value since it connects to a fixed server URL.
-        if (!isTauriRuntime()) {
-          const storedBaseUrl = window.localStorage.getItem("openwork.baseUrl");
-          if (storedBaseUrl) {
-            setBaseUrl(storedBaseUrl);
+        // Restore baseUrl from localStorage so GlobalSDK and server use the right host on reopen.
+        // In Tauri: restore only remote URLs (ngrok/https); local OpenCode port changes on restart.
+        // Web: restore any stored URL (fixed server).
+        const storedBaseUrl = window.localStorage.getItem("openwork.baseUrl");
+        if (storedBaseUrl) {
+          const trimmed = storedBaseUrl.trim();
+          const isRemote = trimmed.includes("ngrok") || trimmed.startsWith("https://");
+          if (!isTauriRuntime() || isRemote) {
+            setBaseUrl(trimmed);
           }
         }
 

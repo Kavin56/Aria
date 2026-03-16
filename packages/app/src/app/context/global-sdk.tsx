@@ -38,14 +38,15 @@ export function GlobalSDKProvider(props: ParentProps) {
     const baseUrl = server.url;
     const isHealthy = server.healthy() === true;
 
-    const token = (() => {
+    const readToken = () => {
       if (typeof window === "undefined") return "";
       try {
         return (window.localStorage.getItem("openwork.server.token") ?? "").trim();
       } catch {
         return "";
       }
-    })();
+    };
+    const token = readToken();
     const headers: Record<string, string> = { ...(token && baseUrl.includes("/opencode") ? { Authorization: `Bearer ${token}` } : {}) };
     if (baseUrl.includes("ngrok")) {
       headers["ngrok-skip-browser-warning"] = "1";
@@ -57,6 +58,10 @@ export function GlobalSDKProvider(props: ParentProps) {
         ? (input: RequestInfo | URL, init?: RequestInit) => {
             const headersIn = new Headers(init?.headers);
             headersIn.set("ngrok-skip-browser-warning", "1");
+            const t = readToken();
+            if (t && (typeof input === "string" ? input : input instanceof URL ? input.href : input.url).includes("/opencode")) {
+              headersIn.set("Authorization", `Bearer ${t}`);
+            }
             const f = typeof platform.fetch === "function" ? platform.fetch : globalThis.fetch;
             return f(input, { ...init, headers: headersIn });
           }

@@ -260,6 +260,12 @@ export function safeParseJson<T>(raw: string): T | null {
 
 export function addOpencodeCacheHint(message: string) {
   const lower = message.toLowerCase();
+  if (
+    lower.includes("error sending request for url") ||
+    lower.includes("request failed") && (lower.includes("url") || lower.includes("http"))
+  ) {
+    return "Connection failed. Check that the worker is running and try again.";
+  }
   const cacheSignals = [
     ".cache/opencode",
     "library/caches/opencode",
