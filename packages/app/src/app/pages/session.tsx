@@ -51,6 +51,8 @@ import {
   Undo2,
   X,
   Zap,
+  Activity,
+  Heart,
 } from "lucide-solid";
 
 import Button from "../components/button";
@@ -3859,6 +3861,36 @@ export default function SessionView(props: SessionViewProps) {
       <aside class="w-[280px] hidden xl:flex flex-col bg-dls-sidebar border-l border-gray-6/70 p-3">
         <div class="flex-1 overflow-y-auto space-y-5 pt-2">
           <div class="space-y-1 mb-2">
+          <button
+            type="button"
+            class={`w-full h-9 flex items-center gap-2.5 px-3 rounded-lg text-[13px] font-medium transition-colors ${
+              showRightSidebarSelection() && props.tab === "mission-control"
+                ? "bg-gray-4 text-gray-12"
+                : "text-gray-11 hover:text-gray-12 hover:bg-gray-3"
+            }`}
+            onClick={() => {
+              props.setTab("mission-control");
+              props.setView("dashboard");
+            }}
+          >
+            <Activity size={18} />
+            Mission Control
+          </button>
+          <button
+            type="button"
+            class={`w-full h-9 flex items-center gap-2.5 px-3 rounded-lg text-[13px] font-medium transition-colors ${
+              showRightSidebarSelection() && props.tab === "soul"
+                ? "bg-gray-4 text-gray-12"
+                : "text-gray-11 hover:text-gray-12 hover:bg-gray-3"
+            }`}
+            onClick={() => {
+              props.setTab("soul");
+              props.setView("dashboard");
+            }}
+          >
+            <Heart size={18} />
+            Soul
+          </button>
           <button
             type="button"
             class={`w-full h-9 flex items-center gap-2.5 px-3 rounded-lg text-[13px] font-medium transition-colors ${

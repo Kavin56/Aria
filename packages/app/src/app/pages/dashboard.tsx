@@ -459,6 +459,17 @@ export default function DashboardView(props: DashboardViewProps) {
     }
   };
 
+  /** First local workspace (e.g. Starter) for "Use X for Messaging" when on remote. */
+  const localWorkspaceForMessaging = () => props.workspaces.find((w) => w.workspaceType === "local") ?? null;
+  const switchToLocalWorkspace = () => {
+    const w = localWorkspaceForMessaging();
+    if (w?.id) void Promise.resolve(props.activateWorkspace(w.id));
+  };
+  const localWorkspaceLabel = () => {
+    const w = localWorkspaceForMessaging();
+    return (w?.displayName?.trim() || w?.name?.trim() || "Starter") || "Starter";
+  };
+
   /** Start or restart OpenCode Router so Messaging works without manual Settings steps. */
   const ensureOpenCodeRouterRunning = async (): Promise<void> => {
     if (!isTauriRuntime()) return;
@@ -1269,6 +1280,8 @@ export default function DashboardView(props: DashboardViewProps) {
                 developerMode={props.developerMode}
                 opencodeRouterHealthPort={props.opencodeRouterInfo?.healthPort ?? null}
                 ensureOpenCodeRouterRunning={ensureOpenCodeRouterRunning}
+                switchToLocalWorkspace={localWorkspaceForMessaging() ? switchToLocalWorkspace : undefined}
+                localWorkspaceLabel={localWorkspaceForMessaging() ? localWorkspaceLabel() : undefined}
               />
             </Match>
 

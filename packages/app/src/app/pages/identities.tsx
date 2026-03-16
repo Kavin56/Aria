@@ -38,6 +38,10 @@ export type IdentitiesViewProps = {
   opencodeRouterHealthPort?: number | null;
   /** When provided, Messaging can auto-start the router when unreachable (local) and retry Create public bot. */
   ensureOpenCodeRouterRunning?: () => Promise<void>;
+  /** When on a remote worker without Messaging, call this to switch to the local worker (e.g. Starter). */
+  switchToLocalWorkspace?: () => void;
+  /** Label for the local worker (e.g. "Starter") for the switch button. */
+  localWorkspaceLabel?: string;
 };
 
 const OPENCODE_ROUTER_AGENT_FILE_PATH = ".opencode/agents/opencode-router.md";
@@ -203,6 +207,21 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
   const serverReady = createMemo(() => props.openworkServerStatus === "connected" && Boolean(openworkServerClient()));
   const scopedWorkspaceReady = createMemo(() => Boolean(workspaceId()));
   const defaultRoutingDirectory = createMemo(() => props.activeWorkspaceRoot.trim() || "Not set");
+
+  /** True when connected to local OpenWork server; only then use desktop's router healthPort. For remote/cloud, server uses its own router. */
+  const isLocalOpenworkServer = createMemo(() => {
+    const url = props.openworkServerUrl.trim();
+    return (
+      url.includes("127.0.0.1") ||
+      url.includes("localhost") ||
+      url.startsWith("http://127.0.0.1") ||
+      url.startsWith("http://localhost")
+    );
+  });
+
+  const effectiveHealthPort = createMemo(() =>
+    isLocalOpenworkServer() ? (props.opencodeRouterHealthPort ?? undefined) : undefined,
+  );
 
   let lastResetKey = "";
 
@@ -440,10 +459,10 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
       const [healthRes, tgRes, slackRes, telegramInfo] = await Promise.all([
         client.opencodeRouterHealth(),
         client.getOpenCodeRouterTelegramIdentities(id, {
-          healthPort: props.opencodeRouterHealthPort ?? undefined,
+          healthPort: effectiveHealthPort(),
         }),
         client.getOpenCodeRouterSlackIdentities(id, {
-          healthPort: props.opencodeRouterHealthPort ?? undefined,
+          healthPort: effectiveHealthPort(),
         }),
         client.getOpenCodeRouterTelegram(id).catch(() => null),
       ]);
@@ -537,7 +556,7 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
           enabled: telegramEnabled(),
           access,
         },
-        { healthPort: props.opencodeRouterHealthPort ?? undefined },
+        { healthPort: effectiveHealthPort() },
       );
       if (result.ok) {
         const pairingCode = typeof result.telegram?.pairingCode === "string" ? result.telegram.pairingCode.trim() : "";
@@ -743,10 +762,7 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
   createEffect(() => {
     const err = healthError();
     if (!err || !err.toLowerCase().includes("not reachable")) return;
-    const url = props.openworkServerUrl.trim();
-    const isLocal =
-      url.includes("127.0.0.1") || url.includes("localhost") || url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost");
-    if (!isLocal || !props.ensureOpenCodeRouterRunning || routerAutoStartAttempted()) return;
+    if (!isLocalOpenworkServer() || !props.ensureOpenCodeRouterRunning || routerAutoStartAttempted()) return;
     setRouterAutoStartAttempted(true);
     void (async () => {
       await props.ensureOpenCodeRouterRunning!();
@@ -883,11 +899,32 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
                       value().toLowerCase().includes("opencoderouter is not configured"))
                   }
                 >
-                  <div class="rounded-lg border border-amber-7/25 bg-amber-1/30 px-3 py-2 text-xs text-amber-12">
-                    <strong>To connect Telegram or Slack:</strong> Messaging only works when the OpenWork host runs
-                    OpenCode Router. You’re connected to a remote workspace that doesn’t have it. Switch to your{" "}
-                    <strong>local workspace (Starter)</strong> in the left sidebar to use Messaging and connect
-                    Telegram, or run the remote host with OpenCode Router enabled.
+                  <div class="rounded-lg border border-amber-7/25 bg-amber-1/30 px-3 py-2 text-xs text-amber-12 space-y-2">
+                    <p class="m-0">
+                      <strong>Messaging isn’t available on this worker.</strong> You can either use your local worker for
+                      Telegram, or enable OpenCode Router on this host (e.g. RunPod) so this worker powers Telegram too.
+                    </p>
+                    <div class="flex flex-wrap gap-2 mt-1.5">
+                      <Show
+                        when={!isLocalOpenworkServer() && props.switchToLocalWorkspace && props.localWorkspaceLabel}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => props.switchToLocalWorkspace!()}
+                          class="rounded-md border border-amber-8 bg-amber-3 px-2.5 py-1.5 text-[11px] font-semibold text-amber-12 hover:bg-amber-4 transition-colors"
+                        >
+                          Use {props.localWorkspaceLabel} for Messaging
+                        </button>
+                      </Show>
+                      <Show when={!isLocalOpenworkServer()}>
+                        <p class="m-0 text-[11px] text-amber-12">
+                          <strong>Connect Telegram to this worker:</strong> On the host (e.g. RunPod), set{" "}
+                          <code class="rounded bg-amber-4/50 px-0.5 font-mono">OPENCODE_ROUTER_HEALTH_PORT=3005</code>{" "}
+                          and run <code class="rounded bg-amber-4/50 px-0.5 font-mono">opencode-router start</code>, or
+                          start the host without <code class="rounded bg-amber-4/50 px-0.5 font-mono">--no-opencode-router</code>. Then refresh.
+                        </p>
+                      </Show>
+                    </div>
                   </div>
                 </Show>
                 <Show
@@ -897,10 +934,18 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
                   }
                 >
                   <div class="rounded-lg border border-amber-7/25 bg-amber-1/30 px-3 py-2 text-xs text-amber-12">
-                    <strong>OpenCode Router isn’t running.</strong> Open <strong>Settings</strong> (gear icon at bottom
-                    right), scroll to <strong>OpenCode Router</strong>, and click <strong>Restart OpenCode Router</strong>.
-                    If it still fails, try stopping the host (Settings) and opening <strong>Starter</strong> again to
-                    restart the worker and router.
+                    <strong>OpenCode Router isn’t running on this worker.</strong>{" "}
+                    {isLocalOpenworkServer() ? (
+                      <>
+                        Open <strong>Settings</strong> (gear icon at bottom right), scroll to <strong>OpenCode
+                        Router</strong>, and click <strong>Restart OpenCode Router</strong>. If it still fails, try
+                        stopping the host and opening <strong>Starter</strong> again.
+                      </>
+                    ) : (
+                      <>
+                        For a remote or cloud worker, ask the host administrator to start OpenCode Router on the server.
+                      </>
+                    )}
                   </div>
                 </Show>
               </div>
