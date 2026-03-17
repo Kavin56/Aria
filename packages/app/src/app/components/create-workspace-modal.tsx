@@ -6,12 +6,12 @@ import type { WorkspacePreset } from "../types";
 
 import Button from "./button";
 
-type FolderMode = "local" | "runpod";
+type FolderMode = "local";
 
 export default function CreateWorkspaceModal(props: {
   open: boolean;
   onClose: () => void;
-  onConfirm: (preset: WorkspacePreset, folder: string | null, options?: { folderMode?: "runpod" }) => void;
+  onConfirm: (preset: WorkspacePreset, folder: string | null) => void;
   onConfirmWorker?: (preset: WorkspacePreset, folder: string | null) => void;
   onPickFolder: () => Promise<string | null>;
   submitting?: boolean;
@@ -48,13 +48,11 @@ export default function CreateWorkspaceModal(props: {
   const [selectedFolder, setSelectedFolder] = createSignal<string | null>(null);
   const [pickingFolder, setPickingFolder] = createSignal(false);
   const [folderMode, setFolderMode] = createSignal<FolderMode>("local");
-  const [remotePath, setRemotePath] = createSignal("/workspace");
 
   createEffect(() => {
     if (props.open) {
       setPreset(props.defaultPreset ?? "starter");
       setFolderMode("local");
-      setRemotePath("/workspace");
       requestAnimationFrame(() => pickFolderRef?.focus());
     }
   });
@@ -78,9 +76,7 @@ export default function CreateWorkspaceModal(props: {
   ];
 
   const effectiveFolder = createMemo(() => {
-    if (folderMode() === "local") return selectedFolder();
-    const path = remotePath().trim();
-    return path ? path : null;
+    return selectedFolder();
   });
 
   const folderLabel = () => {
@@ -172,83 +168,32 @@ export default function CreateWorkspaceModal(props: {
                 {translate("dashboard.select_folder")}
               </div>
               <div class="ml-9 space-y-4">
-                <div class="flex rounded-lg border border-gray-6 bg-gray-2/50 p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setFolderMode("local")}
-                    disabled={submitting()}
-                    class={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-                      folderMode() === "local"
-                        ? "bg-indigo-6 text-white shadow-sm"
-                        : "text-gray-11 hover:text-gray-12"
-                    } ${submitting() ? "opacity-50 cursor-not-allowed" : ""}`.trim()}
-                  >
-                    {translate("dashboard.folder_mode_local")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFolderMode("runpod")}
-                    disabled={submitting()}
-                    class={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-                      folderMode() === "runpod"
-                        ? "bg-indigo-6 text-white shadow-sm"
-                        : "text-gray-11 hover:text-gray-12"
-                    } ${submitting() ? "opacity-50 cursor-not-allowed" : ""}`.trim()}
-                  >
-                    {translate("dashboard.folder_mode_runpod")}
-                  </button>
-                </div>
-
-                <Show
-                  when={folderMode() === "local"}
-                  fallback={
-                    <div class="space-y-2">
-                      <p class="text-xs text-gray-10">
-                        {translate("dashboard.remote_path_hint")} ({translate("dashboard.remote_path_placeholder")})
-                      </p>
-                      <input
-                        type="text"
-                        value={remotePath()}
-                        onInput={(e) => setRemotePath(e.currentTarget.value)}
-                        placeholder="/workspace"
-                        class="w-full rounded-xl border border-gray-6 bg-gray-2 px-3 py-2.5 text-sm text-gray-12 placeholder:text-gray-9 focus:border-indigo-6 focus:outline-none focus:ring-1 focus:ring-indigo-6"
-                      />
-                      <Show when={remotePath().trim()}>
-                        <p class="text-xs text-emerald-11 flex items-center gap-1.5">
-                          <CheckCircle2 size={14} />
-                          {translate("dashboard.remote_path_will_use")} <span class="font-mono">{remotePath().trim() || "/"}</span>
-                        </p>
-                      </Show>
-                    </div>
-                  }
+                <button
+                  type="button"
+                  ref={pickFolderRef}
+                  onClick={handlePickFolder}
+                  disabled={pickingFolder() || submitting()}
+                  class={`w-full border border-dashed border-gray-7 bg-gray-2/50 rounded-xl p-4 text-left transition ${
+                    pickingFolder() ? "opacity-70 cursor-wait" : "hover:border-gray-7"
+                  }`.trim()}
                 >
-                  <button
-                    type="button"
-                    ref={pickFolderRef}
-                    onClick={handlePickFolder}
-                    disabled={pickingFolder() || submitting()}
-                    class={`w-full border border-dashed border-gray-7 bg-gray-2/50 rounded-xl p-4 text-left transition ${
-                      pickingFolder() ? "opacity-70 cursor-wait" : "hover:border-gray-7"
-                    }`.trim()}
-                  >
-                    <div class="flex items-center gap-3 text-gray-12">
-                      <FolderPlus size={20} class="text-gray-11" />
-                      <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium text-gray-12 truncate">{folderLabel()}</div>
-                        <div class="text-xs text-gray-10 font-mono truncate mt-1">{folderSubLabel()}</div>
-                      </div>
-                      <Show
-                        when={pickingFolder()}
-                        fallback={<span class="text-xs text-gray-10">{translate("dashboard.change")}</span>}
-                      >
-                        <span class="flex items-center gap-2 text-xs text-gray-10">
-                          <Loader2 size={12} class="animate-spin" />
-                          {translate("dashboard.opening")}
-                        </span>
-                      </Show>
+                  <div class="flex items-center gap-3 text-gray-12">
+                    <FolderPlus size={20} class="text-gray-11" />
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium text-gray-12 truncate">{folderLabel()}</div>
+                      <div class="text-xs text-gray-10 font-mono truncate mt-1">{folderSubLabel()}</div>
                     </div>
-                  </button>
-                </Show>
+                    <Show
+                      when={pickingFolder()}
+                      fallback={<span class="text-xs text-gray-10">{translate("dashboard.change")}</span>}
+                    >
+                      <span class="flex items-center gap-2 text-xs text-gray-10">
+                        <Loader2 size={12} class="animate-spin" />
+                        {translate("dashboard.opening")}
+                      </span>
+                    </Show>
+                  </div>
+                </button>
               </div>
             </div>
 
@@ -423,7 +368,7 @@ export default function CreateWorkspaceModal(props: {
           </Show>
           <Show when={props.onConfirmWorker}>
             <Button
-              variant={folderMode() === "runpod" ? "primary" : "outline"}
+              variant="outline"
               onClick={() => props.onConfirmWorker?.(preset(), effectiveFolder())}
               disabled={!effectiveFolder() || submitting() || workerSubmitting() || workerDisabled()}
               title={(() => {
@@ -441,9 +386,7 @@ export default function CreateWorkspaceModal(props: {
             </Button>
           </Show>
           <Button
-            onClick={() =>
-              props.onConfirm(preset(), effectiveFolder(), folderMode() === "runpod" ? { folderMode: "runpod" } : undefined)
-            }
+            onClick={() => props.onConfirm(preset(), effectiveFolder())}
             disabled={!effectiveFolder() || submitting()}
             title={
               !effectiveFolder()

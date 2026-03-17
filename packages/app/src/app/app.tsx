@@ -6654,20 +6654,7 @@ export default function App() {
         }}
         onPickFolder={workspaceStore.pickWorkspaceFolder}
         defaultPreset={createWorkspaceDefaultPreset()}
-        onConfirm={async (preset, folder, options) => {
-          if (options?.folderMode === "runpod" && folder) {
-            const settings = openworkServerSettings();
-            const hostUrl = getEffectiveOpenworkServerUrl(settings) ?? DEFAULT_CLOUD_WORKER_URL;
-            const token = settings.token ?? "";
-            const ok = await workspaceStore.createRemoteWorkspaceFlow({
-              openworkHostUrl: hostUrl,
-              openworkToken: token,
-              directory: folder,
-              displayName: folder.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "RunPod",
-              closeModal: true,
-            });
-            return;
-          }
+        onConfirm={async (preset, folder) => {
           const request = sharedBundleCreateWorkerRequest();
           const ok = await workspaceStore.createWorkspaceFlow(preset, folder);
           if (!ok || !request) return;

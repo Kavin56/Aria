@@ -1,0 +1,12 @@
+{
+  "name": "swift-website-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js"
+  },
+  "dependencies": {
+    "fastify": "^5.3.0"
+  }
+}
+

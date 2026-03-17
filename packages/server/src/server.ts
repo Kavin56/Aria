@@ -1420,6 +1420,41 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     return jsonResponse({ items, activeId: active?.id ?? null });
   });
 
+  addRoute(routes, "POST", "/workspaces", "host", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request);
+    const path = typeof body.path === "string" ? body.path.trim() : "";
+    const directory = typeof body.directory === "string" ? body.directory.trim() : "";
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!path) {
+      throw new ApiError(400, "path_required", "Workspace path is required");
+    }
+
+    // Create a workspace entry that proxies to the same OpenCode base as the default workspace.
+    const base = config.workspaces[0] ?? null;
+    if (!base) {
+      throw new ApiError(500, "no_workspace", "Host has no base workspace configured");
+    }
+
+    const workspace: typeof base = {
+      ...base,
+      id: workspaceIdForPath(resolve(path)),
+      path: path,
+      name: name || base.name,
+      ...(directory ? { directory } : {}),
+    };
+
+    // De-dupe by id.
+    const existingIndex = config.workspaces.findIndex((w) => w.id === workspace.id);
+    if (existingIndex !== -1) {
+      config.workspaces[existingIndex] = workspace;
+    } else {
+      config.workspaces = [workspace, ...config.workspaces];
+    }
+
+    return jsonResponse({ ok: true, workspace: serializeWorkspace(workspace) }, 201);
+  });
+
   addRoute(routes, "GET", "/tokens", "host", async () => {
     const items = await tokens.list();
     return jsonResponse({ items });

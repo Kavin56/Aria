@@ -50,6 +50,8 @@ export default function CreateRemoteWorkspaceModal(props: {
     return openworkHostUrl().trim().length > 0;
   });
 
+  const swiftCloudUrl = () => "http://localhost:5331";
+
   createEffect(() => {
     if (props.open) {
       requestAnimationFrame(() => inputRef?.focus());
@@ -92,6 +94,24 @@ export default function CreateRemoteWorkspaceModal(props: {
           <div>
             <div class="text-sm font-medium text-gray-12">{translate("dashboard.remote_workspace_title")}</div>
             <div class="text-xs text-gray-10">{translate("dashboard.remote_workspace_hint")}</div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-gray-6 bg-gray-1/30 p-4">
+          <div class="text-sm font-medium text-gray-12">Swift Cloud</div>
+          <div class="mt-1 text-xs text-gray-10 leading-relaxed">
+            Generate a remote worker URL + access token on the Swift website, then paste them below.
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <a
+              href={swiftCloudUrl()}
+              target="_blank"
+              rel="noreferrer"
+              class="inline-flex items-center rounded-lg border border-gray-6 bg-gray-2 px-3 py-2 text-xs font-semibold text-gray-12 hover:bg-gray-3 transition-colors"
+            >
+              Open Swift Cloud
+            </a>
+            <span class="text-[11px] text-gray-10">Default: {swiftCloudUrl()}</span>
           </div>
         </div>
 
