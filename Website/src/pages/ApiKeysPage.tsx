@@ -6,6 +6,8 @@ type LocalApiKey = {
   createdAt: number;
   label: string;
   project: string;
+  workerUrl: string;
+  plaintextKey: string;
   keyHash: string;
   masked: string;
 };
@@ -147,6 +149,7 @@ export function ApiKeysPage() {
 
       const project = createKeyProject.trim() || "default";
       const label = createKeyLabel.trim() || "Swift API Key";
+      const workerUrl = runpodBaseUrl;
 
       const { error } = await supabase.from("swift_api_keys").insert({
         project,
@@ -160,6 +163,8 @@ export function ApiKeysPage() {
         createdAt: Date.now(),
         project,
         label,
+        workerUrl,
+        plaintextKey: plaintext,
         keyHash,
         masked,
       };
@@ -463,8 +468,10 @@ export function ApiKeysPage() {
                       </div>
                     </div>
                     <div className="td">
-                      <div className="link">{k.project}</div>
-                      <div className="sub">swift-client-{k.keyHash.slice(0, 10)}</div>
+                      <div className="link" onClick={() => void copyText(k.workerUrl)} title="Copy worker URL">
+                        {k.workerUrl}
+                      </div>
+                      <div className="sub">{k.project}</div>
                     </div>
                     <div className="td">{formatDate(k.createdAt)}</div>
                     <div className="td">
@@ -472,7 +479,13 @@ export function ApiKeysPage() {
                       <div className="sub">Free tier</div>
                     </div>
                     <div className="td td-actions">
-                      <button className="icon-btn small" type="button" aria-label="Copy masked" onClick={() => copyText(k.masked)}>
+                      <button
+                        className="icon-btn small"
+                        type="button"
+                        aria-label="Copy API key"
+                        onClick={() => copyText(k.plaintextKey)}
+                        title="Copy API key"
+                      >
                         <Icon size={16}>
                           <path d="M9 9h10v10H9V9ZM5 5h10v2H7v8H5V5Z" fill="currentColor" />
                         </Icon>
