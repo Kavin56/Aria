@@ -11,6 +11,9 @@ _tmp_*
 # Website local dev artifacts
 Website/tsconfig.tsbuildinfo
 
+# Cursor agent debug logs
+.cursor/
+
 # Local git worktrees
 _worktrees/
 
