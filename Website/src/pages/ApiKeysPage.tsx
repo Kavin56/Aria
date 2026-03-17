@@ -1,4 +1,5 @@
-import { ReactNode } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { ReactNode, useMemo, useState } from "react";
 
 function Icon({
   children,
@@ -46,6 +47,63 @@ function SidebarItem({
 }
 
 export function ApiKeysPage() {
+  const runpodBaseUrl = useMemo(() => {
+    const raw =
+      (import.meta as any).env?.VITE_SWIFT_RUNPOD_WORKER_URL ||
+      "https://unameliorative-regretably-kimberly.ngrok-free.dev";
+    return String(raw).trim().replace(/\/+$/, "");
+  }, []);
+
+  const supabaseUrl = ((import.meta as any).env?.VITE_SWIFT_SUPABASE_URL || "").trim();
+  const supabaseAnonKey = ((import.meta as any).env?.VITE_SWIFT_SUPABASE_ANON_KEY || "").trim();
+  const supabase = useMemo(() => {
+    if (!supabaseUrl || !supabaseAnonKey) return null;
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }, [supabaseUrl, supabaseAnonKey]);
+
+  const [workerBusy, setWorkerBusy] = useState(false);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+  const [workerBundle, setWorkerBundle] = useState<{ url: string; key: string } | null>(null);
+
+  async function sha256Hex(text: string): Promise<string> {
+    const data = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  function makeKey(): string {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  async function createRemoteWorkerKey() {
+    setWorkerBusy(true);
+    setWorkerError(null);
+    setWorkerBundle(null);
+    try {
+      if (!supabase) throw new Error("Supabase env is not configured on this website.");
+      if (!runpodBaseUrl) throw new Error("RunPod worker URL is not configured.");
+      const url = runpodBaseUrl;
+      const key = makeKey();
+      const keyHash = await sha256Hex(key);
+
+      const { error } = await supabase.from("swift_keys").insert({ url, key_hash: keyHash });
+      if (error) throw new Error(error.message);
+
+      setWorkerBundle({ url, key });
+    } catch (e) {
+      setWorkerError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWorkerBusy(false);
+    }
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -188,6 +246,71 @@ export function ApiKeysPage() {
               </button>
             </div>
           </div>
+
+          <section className="card" aria-label="Remote worker key">
+            <div className="card-toolbar">
+              <div className="segmented" role="tablist" aria-label="Remote worker">
+                <span className="seg-label">Remote worker</span>
+                <button className="seg-btn is-on" type="button">
+                  URL + Swift key
+                </button>
+              </div>
+              <div className="filter">
+                <button
+                  className="primary-btn subtle"
+                  type="button"
+                  onClick={createRemoteWorkerKey}
+                  disabled={workerBusy}
+                >
+                  {workerBusy ? "Generating..." : "Generate URL + key"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ padding: 16 }}>
+              <div style={{ fontSize: 12, opacity: 0.85 }}>
+                Worker URL: <code>{runpodBaseUrl}</code>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+                Paste the URL + key into the OpenWork desktop app “Connect remote”. It will validate with Supabase.
+              </div>
+
+              {workerError ? (
+                <div style={{ marginTop: 12, color: "#FF9B9B" }}>{workerError}</div>
+              ) : null}
+
+              {workerBundle ? (
+                <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>URL</div>
+                    <code
+                      style={{
+                        display: "block",
+                        padding: 10,
+                        borderRadius: 10,
+                        background: "rgba(255,255,255,0.04)",
+                      }}
+                    >
+                      {workerBundle.url}
+                    </code>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>Swift key</div>
+                    <code
+                      style={{
+                        display: "block",
+                        padding: 10,
+                        borderRadius: 10,
+                        background: "rgba(255,255,255,0.04)",
+                      }}
+                    >
+                      {workerBundle.key}
+                    </code>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </section>
 
           <section className="card" aria-label="API keys table">
             <div className="card-toolbar">
