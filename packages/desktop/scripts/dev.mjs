@@ -35,7 +35,8 @@ process.env.OPENWORK_DATA_DIR =
   process.env.OPENWORK_DATA_DIR ||
   join(homedir(), ".openwork", "openwork-orchestrator-dev");
 
-const devUrl = `http://localhost:${port}`;
+const devHost = process.env.OPENWORK_DEV_HOST || (process.platform === "win32" ? "127.0.0.1" : "localhost");
+const devUrl = `http://${devHost}:${port}`;
 const tmpDir = mkdtempSync(join(tmpdir(), "openwork-tauri-"));
 const devUrlConfigPath = join(tmpDir, "dev-url.json");
 writeFileSync(devUrlConfigPath, JSON.stringify({ build: { devUrl } }, null, 0));
