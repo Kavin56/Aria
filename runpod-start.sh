@@ -228,4 +228,6 @@ echo ""
 echo "Client token (paste in web UI Config/Advanced): $MAYA_TOKEN"
 echo ""
 
-wait $SERVER_PID
+echo "Tip: This script exits but services keep running."
+echo "To stop: pkill -9 ngrok; pkill -f \"openwork-server\"; pkill -f \"opencode serve\""
+exit 0
