@@ -138,7 +138,8 @@ else
   echo "  Starting ngrok tunnel: port $SERVER_PORT -> https://$NGROK_DOMAIN"
   : > /tmp/ngrok.log
   set +e
-  nohup ngrok http "$SERVER_PORT" --url="https://$NGROK_DOMAIN" >> /tmp/ngrok.log 2>&1 &
+  # Be explicit about the upstream target to avoid ngrok showing undefined://undefined
+  nohup ngrok http "http://127.0.0.1:$SERVER_PORT" --url="https://$NGROK_DOMAIN" >> /tmp/ngrok.log 2>&1 &
   NGROK_PID=$!
   disown $NGROK_PID 2>/dev/null || true
   echo "  Waiting for ngrok to register (4s)..."
