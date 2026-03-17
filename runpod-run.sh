@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 # Reset scripts so pull never fails on local changes; fix CRLF if present
 git checkout -- runpod-start.sh runpod-run.sh 2>/dev/null || true
 sed -i 's/\r$//' runpod-start.sh runpod-run.sh 2>/dev/null || true
-git pull origin master
+git pull origin main
 chmod +x runpod-start.sh
 pkill -9 ngrok 2>/dev/null || true
 sleep 4

@@ -5,6 +5,7 @@ import { t, currentLocale } from "../../i18n";
 
 import Button from "./button";
 import TextInput from "./text-input";
+import { validateRemoteWorkerInSwiftCloud } from "../lib/swift-cloud";
 
 export default function CreateRemoteWorkspaceModal(props: {
   open: boolean;
@@ -37,6 +38,8 @@ export default function CreateRemoteWorkspaceModal(props: {
   const [openworkTokenVisible, setOpenworkTokenVisible] = createSignal(false);
   const [directory, setDirectory] = createSignal("");
   const [displayName, setDisplayName] = createSignal("");
+  const [swiftCloudValidating, setSwiftCloudValidating] = createSignal(false);
+  const [swiftCloudError, setSwiftCloudError] = createSignal<string | null>(null);
 
   const showClose = () => props.showClose ?? true;
   const title = () => props.title ?? translate("dashboard.create_remote_workspace_title");
@@ -168,6 +171,13 @@ export default function CreateRemoteWorkspaceModal(props: {
       </div>
 
       <div class="p-6 border-t border-gray-6 bg-gray-1 space-y-3">
+        <Show when={swiftCloudError()}>
+          {(value) => (
+            <div class="p-3 rounded-lg bg-red-3/50 border border-red-6 text-sm text-red-11">
+              {value()}
+            </div>
+          )}
+        </Show>
         <Show when={props.error}>
           <div class="p-3 rounded-lg bg-red-3/50 border border-red-6 text-sm text-red-11">
             {props.error}
@@ -180,18 +190,38 @@ export default function CreateRemoteWorkspaceModal(props: {
             </Button>
           </Show>
           <Button
-            onClick={() =>
-              props.onConfirm({
-                openworkHostUrl: openworkHostUrl().trim(),
-                openworkToken: openworkToken().trim(),
-                directory: directory().trim() ? directory().trim() : null,
-                displayName: displayName().trim() ? displayName().trim() : null,
-              })
-            }
-            disabled={!canSubmit()}
+            onClick={() => {
+              if (swiftCloudValidating()) return;
+              setSwiftCloudError(null);
+              void (async () => {
+                setSwiftCloudValidating(true);
+                try {
+                  // Validate (url, token) against Swift Cloud when configured.
+                  const result = await validateRemoteWorkerInSwiftCloud({
+                    url: openworkHostUrl().trim(),
+                    token: openworkToken().trim(),
+                  });
+                  if (!result.ok) {
+                    setSwiftCloudError(result.error);
+                    return;
+                  }
+                  props.onConfirm({
+                    openworkHostUrl: openworkHostUrl().trim(),
+                    openworkToken: openworkToken().trim(),
+                    directory: directory().trim() ? directory().trim() : null,
+                    displayName: displayName().trim() ? displayName().trim() : null,
+                  });
+                } finally {
+                  setSwiftCloudValidating(false);
+                }
+              })();
+            }}
+            disabled={!canSubmit() || swiftCloudValidating()}
             title={!openworkHostUrl().trim() ? translate("dashboard.remote_base_url_required") : undefined}
           >
-            {confirmLabel()}
+            <Show when={swiftCloudValidating()} fallback={confirmLabel()}>
+              Validating...
+            </Show>
           </Button>
         </div>
       </div>

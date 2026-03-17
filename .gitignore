@@ -8,6 +8,9 @@ tmp/
 _tmp_*/
 _tmp_*
 
+# Website local dev artifacts
+Website/tsconfig.tsbuildinfo
+
 # Local git worktrees
 _worktrees/
 

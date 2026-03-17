@@ -19,7 +19,7 @@ SERVER_PORT=8787
 OPENCODE_PORT=4096
 
 export NGROK_DOMAIN="${NGROK_DOMAIN:-unameliorative-regretably-kimberly.ngrok-free.dev}"
-export NGROK_AUTHTOKEN="${NGROK_AUTHTOKEN:-3AsGlODWFrruTjeoUYbH3N0uVgN_31vM8icuUDYZM11D4oqzX}"
+export NGROK_AUTHTOKEN="${NGROK_AUTHTOKEN:-}"
 
 echo ""
 echo "╔════════════════════════════════════════════╗"
