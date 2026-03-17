@@ -18,6 +18,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_PORT=8787
 OPENCODE_PORT=4096
 
+# Load RunPod env overrides if present.
+# This lets you set NGROK_AUTHTOKEN / NGROK_DOMAIN in /workspace/Aria/.env without manual exporting.
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$SCRIPT_DIR/.env"
+  set +a
+fi
+
 export NGROK_DOMAIN="${NGROK_DOMAIN:-unameliorative-regretably-kimberly.ngrok-free.dev}"
 export NGROK_AUTHTOKEN="${NGROK_AUTHTOKEN:-}"
 
