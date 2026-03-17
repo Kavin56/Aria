@@ -452,7 +452,7 @@ export function ApiKeysPage() {
             <div className="table">
               <div className="thead">
                 <div className="th">Key</div>
-                <div className="th">Project</div>
+                <div className="th">URL</div>
                 <div className="th">Created on</div>
                 <div className="th">Quota tier</div>
                 <div className="th th-actions" />
