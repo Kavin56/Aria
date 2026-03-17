@@ -43,3 +43,40 @@ for insert
 to anon
 with check (true);
 
+-- ---------------------------------------------------------------------------
+-- API keys (Swift) - static site generates key, stores hash only.
+-- Note: without auth, listing is client-local (localStorage). Supabase stores hashes for validation/revocation.
+
+create table if not exists public.swift_api_keys (
+  id bigserial primary key,
+  created_at timestamptz not null default now(),
+  label text null,
+  project text null,
+  key_hash text not null
+);
+
+create index if not exists swift_api_keys_key_hash_idx on public.swift_api_keys (key_hash);
+
+alter table public.swift_api_keys enable row level security;
+
+drop policy if exists "swift_api_keys_insert_anon" on public.swift_api_keys;
+create policy "swift_api_keys_insert_anon"
+on public.swift_api_keys
+for insert
+to anon
+with check (true);
+
+create or replace function public.swift_revoke_api_key(key_hash text)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  with deleted as (
+    delete from public.swift_api_keys k where k.key_hash = swift_revoke_api_key.key_hash returning 1
+  )
+  select exists(select 1 from deleted);
+$$;
+
+grant execute on function public.swift_revoke_api_key(text) to anon;
+
