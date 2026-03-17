@@ -32,7 +32,7 @@ export async function validateRemoteWorkerInSwiftCloud(input: {
 
   try {
     const keyHash = await sha256Hex(swiftKey);
-    const res = await fetch(`${SUPABASE_URL.replace(/\\/+$/, "")}/rest/v1/rpc/swift_validate_key`, {
+    const res = await fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/rpc/swift_validate_key`, {
       method: "POST",
       headers: {
         apikey: SUPABASE_ANON_KEY,
