@@ -4,6 +4,10 @@ const SUPABASE_URL = (import.meta as any).env?.VITE_SWIFT_SUPABASE_URL?.trim?.()
 const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SWIFT_SUPABASE_ANON_KEY?.trim?.() || "";
 const NGROK_SKIP_HEADER: Record<string, string> = { "ngrok-skip-browser-warning": "1" };
 
+export function isSwiftCloudConfigured(): boolean {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+
 async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
   const digest = await crypto.subtle.digest("SHA-256", data);

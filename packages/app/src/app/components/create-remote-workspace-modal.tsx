@@ -5,7 +5,7 @@ import { t, currentLocale } from "../../i18n";
 
 import Button from "./button";
 import TextInput from "./text-input";
-import { validateRemoteWorkerInSwiftCloud } from "../lib/swift-cloud";
+import { isSwiftCloudConfigured, validateRemoteWorkerInSwiftCloud } from "../lib/swift-cloud";
 
 export default function CreateRemoteWorkspaceModal(props: {
   open: boolean;
@@ -207,7 +207,9 @@ export default function CreateRemoteWorkspaceModal(props: {
                   }
                   props.onConfirm({
                     openworkHostUrl: openworkHostUrl().trim(),
-                    openworkToken: openworkToken().trim(),
+                    // Swift key is only a gate. Do not forward it as an OpenWork bearer token.
+                    // When token is null/empty, the app auto-fetches from GET /token on the host.
+                    openworkToken: isSwiftCloudConfigured() ? null : openworkToken().trim(),
                     directory: directory().trim() ? directory().trim() : null,
                     displayName: displayName().trim() ? displayName().trim() : null,
                   });
