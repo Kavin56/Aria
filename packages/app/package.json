@@ -4,9 +4,9 @@
   "version": "0.11.142",
   "type": "module",
   "scripts": {
-    "dev": "set OPENWORK_DEV_MODE=1 && vite",
+    "dev": "set OPENWORK_DEV_MODE=1 && vite --host 127.0.0.1",
     "build": "vite build",
-    "dev:web": "set OPENWORK_DEV_MODE=1 && vite",
+    "dev:web": "set OPENWORK_DEV_MODE=1 && vite --host 127.0.0.1",
     "build:web": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
