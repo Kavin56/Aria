@@ -111,7 +111,29 @@ const looksLikeVite = async (baseUrl) => {
   }
 };
 
+const killWindowsSidecarLocks = () => {
+  if (process.platform !== "win32") return;
+  const names = [
+    "openwork-orchestrator.exe",
+    "openwork-server.exe",
+    "opencode-router.exe",
+    "opencode.exe",
+    "chrome-devtools-mcp.exe",
+    "OpenWork.exe",
+    "openwork.exe",
+  ];
+  for (const name of names) {
+    try {
+      spawnSync("taskkill", ["/IM", name, "/T", "/F"], { stdio: "ignore", shell: true });
+    } catch {
+      // ignore
+    }
+  }
+};
+
 const runPrepareSidecars = () => {
+  // On Windows, stale sidecar processes can lock target/debug binaries that tauri-build needs to overwrite.
+  killWindowsSidecarLocks();
   const prepareScript = resolve(fileURLToPath(new URL("./prepare-sidecar.mjs", import.meta.url)));
   const args = [prepareScript];
   if (process.env.OPENWORK_SIDECAR_FORCE_BUILD !== "0") {
