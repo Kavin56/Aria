@@ -361,11 +361,22 @@ if (shouldBuildOpenworkServer) {
   }
   const buildResult = spawnSync("bun", openworkServerArgs, {
     cwd: openworkServerDir,
-    stdio: "inherit",
+    encoding: "utf8",
+    stdio: "pipe",
     shell: true,
   });
 
   if (buildResult.status !== 0) {
+    console.error(
+      `[openwork] Bun build failed (status=${buildResult.status ?? "null"}, signal=${buildResult.signal ?? "null"}).`
+    );
+    if (buildResult.error) {
+      console.error("[openwork] Failed to run Bun build:", buildResult.error);
+    }
+    const stdout = typeof buildResult.stdout === "string" ? buildResult.stdout.trim() : "";
+    const stderr = typeof buildResult.stderr === "string" ? buildResult.stderr.trim() : "";
+    if (stdout) console.error(stdout);
+    if (stderr) console.error(stderr);
     process.exit(buildResult.status ?? 1);
   }
 
@@ -486,20 +497,42 @@ if (shouldDownloadOpencode) {
 
   try {
   if (process.platform === "win32") {
-    const psQuote = (value) => `'${value.replace(/'/g, "''")}'`;
-    const psScript = [
-      "$ErrorActionPreference = 'Stop'",
-      `Invoke-WebRequest -Uri ${psQuote(opencodeUrl)} -OutFile ${psQuote(archivePath)}`,
-      `Expand-Archive -Path ${psQuote(archivePath)} -DestinationPath ${psQuote(extractDir)} -Force`,
-    ].join("; ");
-
-    const result = spawnSync("powershell", ["-NoProfile", "-Command", psScript], {
-      stdio: "inherit",
+    // Avoid invoking powershell.exe directly (it may not be on PATH in some environments).
+    // Windows 10+ ships curl.exe and tar.exe (bsdtar) which can extract zip files.
+    const downloadResult = spawnSync("curl", ["-fsSL", "-o", archivePath, opencodeUrl], {
+      encoding: "utf8",
+      stdio: "pipe",
+      shell: true,
     });
-
-    if (result.status !== 0) {
+    if (downloadResult.status !== 0) {
+      console.error(
+        `[openwork] OpenCode download failed (status=${downloadResult.status ?? "null"}, signal=${downloadResult.signal ?? "null"}).`
+      );
+      if (downloadResult.error) console.error(downloadResult.error);
+      const stdout = typeof downloadResult.stdout === "string" ? downloadResult.stdout.trim() : "";
+      const stderr = typeof downloadResult.stderr === "string" ? downloadResult.stderr.trim() : "";
+      if (stdout) console.error(stdout);
+      if (stderr) console.error(stderr);
       cleanupTemp();
-      process.exit(result.status ?? 1);
+      process.exit(downloadResult.status ?? 1);
+    }
+
+    const tarResult = spawnSync("tar", ["-xf", archivePath, "-C", extractDir], {
+      encoding: "utf8",
+      stdio: "pipe",
+      shell: true,
+    });
+    if (tarResult.status !== 0) {
+      console.error(
+        `[openwork] OpenCode extract failed (status=${tarResult.status ?? "null"}, signal=${tarResult.signal ?? "null"}).`
+      );
+      if (tarResult.error) console.error(tarResult.error);
+      const stdout = typeof tarResult.stdout === "string" ? tarResult.stdout.trim() : "";
+      const stderr = typeof tarResult.stderr === "string" ? tarResult.stderr.trim() : "";
+      if (stdout) console.error(stdout);
+      if (stderr) console.error(stderr);
+      cleanupTemp();
+      process.exit(tarResult.status ?? 1);
     }
   } else {
     const downloadResult = spawnSync("curl", ["-fsSL", "-o", archivePath, opencodeUrl], {
@@ -604,8 +637,21 @@ if (shouldBuildOpenCodeRouter) {
   if (bunTarget) {
     opencodeRouterArgs.push("--target", bunTarget);
   }
-  const result = spawnSync("bun", opencodeRouterArgs, { cwd: opencodeRouterDir, stdio: "inherit", shell: true });
+  const result = spawnSync("bun", opencodeRouterArgs, {
+    cwd: opencodeRouterDir,
+    encoding: "utf8",
+    stdio: "pipe",
+    shell: true,
+  });
   if (result.status !== 0) {
+    console.error(
+      `[openwork] Bun build failed (opencode-router) (status=${result.status ?? "null"}, signal=${result.signal ?? "null"}).`
+    );
+    if (result.error) console.error(result.error);
+    const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+    const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+    if (stdout) console.error(stdout);
+    if (stderr) console.error(stderr);
     process.exit(result.status ?? 1);
   }
 
@@ -666,7 +712,8 @@ if (shouldBuildOrchestrator) {
   }
   const result = spawnSync("bun", orchestratorArgs, {
     cwd: orchestratorDir,
-    stdio: "inherit",
+    encoding: "utf8",
+    stdio: "pipe",
     shell: true,
     env: {
       ...process.env,
@@ -675,6 +722,14 @@ if (shouldBuildOrchestrator) {
     },
   });
   if (result.status !== 0) {
+    console.error(
+      `[openwork] Bun build failed (openwork-orchestrator) (status=${result.status ?? "null"}, signal=${result.signal ?? "null"}).`
+    );
+    if (result.error) console.error(result.error);
+    const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+    const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+    if (stdout) console.error(stdout);
+    if (stderr) console.error(stderr);
     process.exit(result.status ?? 1);
   }
 
@@ -741,7 +796,8 @@ if (shouldBuildChromeDevtools) {
 
   const result = spawnSync("bun", chromeDevtoolsArgs, {
     cwd: __dirname,
-    stdio: "inherit",
+    encoding: "utf8",
+    stdio: "pipe",
     shell: true,
     env: {
       ...process.env,
@@ -750,6 +806,14 @@ if (shouldBuildChromeDevtools) {
     },
   });
   if (result.status !== 0) {
+    console.error(
+      `[openwork] Bun build failed (chrome-devtools-mcp) (status=${result.status ?? "null"}, signal=${result.signal ?? "null"}).`
+    );
+    if (result.error) console.error(result.error);
+    const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+    const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+    if (stdout) console.error(stdout);
+    if (stderr) console.error(stderr);
     process.exit(result.status ?? 1);
   }
 
