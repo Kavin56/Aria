@@ -1,9 +1,8 @@
-import { NGROK_SKIP_HEADER } from "./openwork-server";
-
 type SwiftCloudValidationResult = { ok: true } | { ok: false; error: string };
 
 const SUPABASE_URL = (import.meta as any).env?.VITE_SWIFT_SUPABASE_URL?.trim?.() || "";
 const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SWIFT_SUPABASE_ANON_KEY?.trim?.() || "";
+const NGROK_SKIP_HEADER: Record<string, string> = { "ngrok-skip-browser-warning": "1" };
 
 async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);

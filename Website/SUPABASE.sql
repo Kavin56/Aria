@@ -18,6 +18,8 @@ create or replace function public.swift_validate_key(url text, key_hash text)
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select exists(
     select 1
@@ -26,6 +28,9 @@ as $$
       and k.key_hash = swift_validate_key.key_hash
   );
 $$;
+
+-- Allow the website + desktop (anon) to call the validator.
+grant execute on function public.swift_validate_key(text, text) to anon;
 
 -- 3) RLS: keep table private; allow inserts from the website only via anon key
 alter table public.swift_keys enable row level security;
